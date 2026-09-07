@@ -4,31 +4,23 @@ This rebuild fixes the two issues reported after the last build:
 
 ## 1. cloudflared tunnel (BOTH modes) would not connect - PUBLIC URL never populated
 
-Root cause: the binary was extracted to `code_cache` (or `nativeLibraryDir`) because
-the code picked the FIRST WRITABLE candidate directory. Modern Android mounts
-`code_cache` and `nativeLibraryDir` with the **noexec** flag. `setExecutable(true)`
-and `canExecute()` both report OK (they only touch/read the permission bit), but the
-kernel refuses to `forkAndExec` - each tunnel start died with `error=13, Permission denied`.
+Root cause: Android 10+ SELinux W^X policy forbids `execve()` for files extracted at runtime into the app's writable data directories (`files/`, `code_cache/`). The permission bit can be set successfully, but the kernel still returns `error=13, Permission denied`.
 
 Fix in `McpServerService.prepareCloudflaredBinary()`:
-- Always extract to `getFilesDir()/cloudflared` (the app-private files dir, which
-  Android mounts executable for the owning app).
-- Delete stale copies left in `code_cache` and `nativeLibraryDir` so they are never reused.
-- **Prove it runs** by executing `cloudflared --version` and checking exit 0, instead of
-  trusting the permission bit. A noexec mount is now caught immediately at start.
-- Both `startTokenTunnel` and `startQuickTunnel` now set `HOME` and `TMPDIR` env vars for
-  the child process, which cloudflared needs to write its config/cache on Android.
+- The 37 MB arm64 ELF is packaged as `app/src/main/jniLibs/arm64-v8a/libcloudflared.so`.
+- `android:extractNativeLibs="true"` makes Android install it into `nativeLibraryDir`, the exec-permitted native-library location.
+- The service executes that installed file directly and validates it with `cloudflared --version`; it does not copy the binary into app-data paths.
+- Stale files from older builds are removed. Both tunnel modes set writable `HOME` and `TMPDIR` for cloudflared.
 
 ## 2. Termux test hung ("waiting for response") and never passed or failed
 
 Three regressions were fixed:
-- `TermuxBridge.buildResultPendingIntent()` pointed the result broadcast at the
-  `MainActivity` component (an Activity cannot receive a broadcast, so the result was
-  silently dropped). Now the intent stays implicit (action + package, no component) so
-  it reaches the dynamically-registered receiver.
-- The flags OR'd `FLAG_IMMUTABLE` with `FLAG_MUTABLE`, which is rejected at creation on
-  API 31+. Now only FLAG_MUTABLE is applied on API 31+ so Termux can attach the
-  plugin-result bundle.
+- `TermuxBridge.buildResultPendingIntent()` now targets the manifest-declared
+  `TermuxResultReceiver`; it no longer points at the `MainActivity` component.
+- `TermuxResultReceiver` forwards the plugin result to the existing Activity/service
+  listeners.
+- The flags no longer OR `FLAG_IMMUTABLE` with `FLAG_MUTABLE`; only `FLAG_MUTABLE` is
+  applied on API 31+ so Termux can attach the plugin-result bundle.
 - `MainActivity.runTermuxTest()` no longer armed the 12-second watchdog. It is re-armed,
   so a missing response now always resolves to an explicit PASS with output, or FAIL
   telling you to enable "Allow external apps" in Termux.
