@@ -20,7 +20,7 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="Universal MCP Bridge"
-        android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+        android:theme="@style/Theme.MCPBridge">
 
         <activity android:name=".MainActivity"
             android:exported="true">
@@ -37,3 +37,4 @@
             android:foregroundServiceType="dataSync" />
     </application>
 </manifest>
+ 

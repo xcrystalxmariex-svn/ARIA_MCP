@@ -28,6 +28,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -117,13 +118,18 @@ public class McpServerService extends Service {
         registerReceiver(termuxResultReceiver,
                 new IntentFilter(TermuxBridge.ACTION_APP_RESULT));
     }
+@Override
+public int onStartCommand(Intent intent, int flags, int startId) {
+    if (intent != null && ACTION_STOP.equals(intent.getAction())) {
+        stopSelf();
+        return START_NOT_STICKY;
+    }
+    
+    // Clean up before starting fresh
+    stopExistingServer();
+    stopExistingTunnel();
+    // ... rest of method
 
-    @Override
-    public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent != null && ACTION_STOP.equals(intent.getAction())) {
-            stopSelf();
-            return START_NOT_STICKY;
-        }
 
         // Reload custom tools / external MCP servers from prefs without a restart.
         if (intent != null && ACTION_RELOAD.equals(intent.getAction())) {
@@ -135,6 +141,10 @@ public class McpServerService extends Service {
             return START_NOT_STICKY;
         }
 
+        // Clean up any existing server before starting fresh
+        stopExistingServer();
+        stopExistingTunnel();
+
         String token = null;
         String mode = MODE_TOKEN;
         String code = "";
@@ -144,6 +154,10 @@ public class McpServerService extends Service {
             if (m != null) mode = m;
             String c = intent.getStringExtra("auth_code");
             if (c != null) code = c;
+        }
+        if ((token == null || token.trim().isEmpty()) && MODE_TOKEN.equals(mode)) {
+            token = getSharedPreferences("mcp_prefs", MODE_PRIVATE)
+                    .getString("tunnel_token", "");
         }
         this.tunnelMode = mode;
         this.authCode = code.trim();
@@ -184,6 +198,22 @@ public class McpServerService extends Service {
         return START_STICKY;
     }
 
+    private void stopExistingServer() {
+        if (serverSocket != null) {
+            try {
+                serverSocket.close();
+            } catch (IOException ignored) {}
+            serverSocket = null;
+        }
+    }
+
+    private void stopExistingTunnel() {
+        if (cloudflaredProcess != null) {
+            cloudflaredProcess.destroy();
+            cloudflaredProcess = null;
+        }
+    }
+
     // ---------------------------------------------------------------------
     //  Binary extraction + validation
     // ---------------------------------------------------------------------
@@ -201,61 +231,82 @@ public class McpServerService extends Service {
      * makes it executable and validates it.
      */
     private String prepareCloudflaredBinary() {
-        // Use nativeLibraryDir if writable, or fall back to code_cache with a .so extension
-        // which modern Android runtimes permit for loading/executing binaries.
-        File libDir = new File(getApplicationInfo().nativeLibraryDir);
-        binaryFile = new File(libDir, "libcloudflared.so");
-        
-        if (!binaryFile.getParentFile().canWrite()) {
-            binaryFile = new File(getCodeCacheDir(), "libcloudflared.so");
+    // Strategy: try multiple locations that Android might allow execution from
+    File[] candidates = new File[] {
+        new File(getApplicationInfo().nativeLibraryDir, "libcloudflared.so"),
+        new File(getCodeCacheDir(), "libcloudflared.so"),
+        new File(getFilesDir().getParentFile(), "libcloudflared.so"),
+        new File(getFilesDir(), "cloudflared")
+    };
+    
+    // Find first writable candidate directory
+    binaryFile = null;
+    for (File cand : candidates) {
+        File parent = cand.getParentFile();
+        if (parent != null && parent.exists() && parent.canWrite()) {
+            binaryFile = cand;
+            break;
         }
-
-        // 1) If a previous copy exists and looks valid, reuse it.
-        if (binaryFile.exists() && binaryFile.length() > 0) {
-            String status = validateBinaryFile(binaryFile);
-            if (BINARY_OK.equals(status)) {
-                return BINARY_OK;
-            }
-            // stale/broken copy -> remove and re-extract
-            //noinspection ResultOfMethodCallIgnored
-            binaryFile.delete();
-        }
-
-        // 2) Extract from assets.
-        try (InputStream in = getAssets().open("cloudflared");
-             FileOutputStream out = new FileOutputStream(binaryFile)) {
-            byte[] buffer = new byte[64 * 1024];
-            int read;
-            long total = 0;
-            while ((read = in.read(buffer)) != -1) {
-                out.write(buffer, 0, read);
-                total += read;
-            }
-            out.flush();
-            Log.i(TAG, "Extracted cloudflared: " + total + " bytes");
-            DebugLog.log(this, "Svc", "Extracted cloudflared: " + total + " bytes");
-        } catch (IOException e) {
-            Log.e(TAG, "Failed to extract cloudflared asset", e);
-            DebugLog.log(this, "Svc", "Extract FAILED: " + e.getMessage());
-            notifyBinaryProblem(BINARY_EXTRACT_FAILED, e.getMessage());
-            return BINARY_EXTRACT_FAILED;
-        }
-
-        // 3) Make executable.
-        if (!binaryFile.setExecutable(true, false)) {
-            Log.e(TAG, "setExecutable failed for " + binaryFile.getAbsolutePath());
-            DebugLog.log(this, "Svc", "setExecutable FAILED");
-            notifyBinaryProblem(BINARY_NOT_EXEC, null);
-            return BINARY_NOT_EXEC;
-        }
-
-        // 4) Final validation.
-        String status = validateBinaryFile(binaryFile);
-        if (!BINARY_OK.equals(status)) {
-            notifyBinaryProblem(status, null);
-        }
-        return status;
     }
+    if (binaryFile == null) {
+        binaryFile = candidates[0]; // fallback
+    }
+
+    // If previous copy exists and valid, reuse
+    if (binaryFile.exists() && binaryFile.length() > 0) {
+        String status = validateBinaryFile(binaryFile);
+        if (BINARY_OK.equals(status)) {
+            DebugLog.log(this, "Svc", "Reusing existing binary at: " + binaryFile.getAbsolutePath());
+            return BINARY_OK;
+        }
+        binaryFile.delete();
+    }
+
+    // Extract from assets
+    try (InputStream in = getAssets().open("cloudflared");
+         FileOutputStream out = new FileOutputStream(binaryFile)) {
+        byte[] buffer = new byte[64 * 1024];
+        int read;
+        long total = 0;
+        while ((read = in.read(buffer)) != -1) {
+            out.write(buffer, 0, read);
+            total += read;
+        }
+        out.flush();
+        DebugLog.log(this, "Svc", "Extracted cloudflared: " + total + " bytes to " + binaryFile.getAbsolutePath());
+    } catch (IOException e) {
+        DebugLog.log(this, "Svc", "Extract FAILED: " + e.getMessage());
+        notifyBinaryProblem(BINARY_EXTRACT_FAILED, e.getMessage());
+        return BINARY_EXTRACT_FAILED;
+    }
+
+    // Make executable — try multiple methods
+    boolean execOk = false;
+    if (binaryFile.setExecutable(true, false)) {
+        execOk = true;
+    } else {
+        // Fallback: use Runtime.exec chmod
+        try {
+            Process chmod = Runtime.getRuntime().exec(new String[]{"chmod", "755", binaryFile.getAbsolutePath()});
+            chmod.waitFor();
+            execOk = binaryFile.canExecute();
+        } catch (Exception e) {
+            DebugLog.log(this, "Svc", "chmod fallback failed: " + e.getMessage());
+        }
+    }
+    
+    if (!execOk) {
+        DebugLog.log(this, "Svc", "setExecutable FAILED for " + binaryFile.getAbsolutePath());
+        notifyBinaryProblem(BINARY_NOT_EXEC, null);
+        return BINARY_NOT_EXEC;
+    }
+
+    String status = validateBinaryFile(binaryFile);
+    if (!BINARY_OK.equals(status)) {
+        notifyBinaryProblem(status, null);
+    }
+    return status;
+}
 
     /**
      * Checks the file is present, roughly the expected size (~30-35MB) and
@@ -405,15 +456,21 @@ public class McpServerService extends Service {
                 out.write(endpointEvent.getBytes(StandardCharsets.UTF_8));
                 out.flush();
                 DebugLog.log(this, "Svc", "MCP SSE stream opened on GET /mcp");
-                while (true) {
-                    try {
-                        Thread.sleep(15000);
-                    } catch (InterruptedException ie) {
-                        break;
-                    }
-                    out.write(": keepalive\n\n".getBytes(StandardCharsets.UTF_8));
-                    out.flush();
-                }
+                // SSE keepalive with socket health check
+while (!s.isClosed() && !s.isInputShutdown() && !Thread.currentThread().isInterrupted()) {
+    try {
+        s.setSoTimeout(16000);
+        out.write(": keepalive\n\n".getBytes(StandardCharsets.UTF_8));
+        out.flush();
+        Thread.sleep(15000);
+    } catch (SocketTimeoutException ste) {
+        // Client still connected, continue
+    } catch (IOException | InterruptedException e) {
+        DebugLog.log(this, "Svc", "SSE client disconnected");
+        break;
+    }
+}
+
             } else if ("/mcp".equals(path) && "POST".equalsIgnoreCase(method)) {
                 // Optional access-code auth: when a code is configured, every
                 // request must carry Authorization: Bearer <code>. Blank = open.
@@ -463,15 +520,22 @@ public class McpServerService extends Service {
 
                 // Built-in tools. Every tool is listed and gated by its own toggle
                 // (toolEnabled combines the category master switch with the per-tool toggle).
-                tools.put(new JSONObject()
-                        .put("name", "execute_oracle_js")
-                        .put("description", "Executes embedded database JS routines pipeline."));
-                tools.put(new JSONObject()
-                        .put("name", "run_local_process")
-                        .put("description", "Runs a local shell command on the device via Runtime.exec and returns its output."));
-                tools.put(new JSONObject()
-                        .put("name", "run_termux_command")
-                        .put("description", "Forwards terminal runtime triggers to local system packages via Termux RUN_COMMAND."));
+                if (enableOracle) {
+    tools.put(new JSONObject()
+            .put("name", "execute_oracle_js")
+            .put("description", "Executes embedded database JS routines pipeline."));
+}
+if (enableShell) {
+    tools.put(new JSONObject()
+            .put("name", "run_local_process")
+            .put("description", "Runs a local shell command on the device via Runtime.exec and returns its output."));
+}
+if (enableTermux) {
+    tools.put(new JSONObject()
+            .put("name", "run_termux_command")
+            .put("description", "Forwards terminal runtime triggers to local system packages via Termux RUN_COMMAND."));
+}
+ 
 
                 // User-added custom tools (JS snippet or shell command).
                 for (CustomTool t : customTools) {
@@ -778,20 +842,22 @@ public class McpServerService extends Service {
         try {
             JSONArray arr = new JSONArray(raw);
             for (int i = 0; i < arr.length(); i++) {
-                JSONObject o = arr.getJSONObject(i);
-                // Backward compatible: a plain string entry becomes a server with just a URL.
-                if (o.has("url")) {
+                JSONObject o = arr.optJSONObject(i);
+                if (o != null) {
+                    String url = o.optString("url", "").trim();
+                    if (url.isEmpty()) continue;
                     externalServers.add(new ExternalServer(
-                            o.optString("name", o.optString("url")),
-                            o.optString("url"),
+                            o.optString("name", url), url,
                             o.optString("launch"),
                             o.optString("headers", "{}"),
                             o.optString("auth"),
                             o.optBoolean("enabled", true)));
                 } else {
-                    externalServers.add(new ExternalServer(
-                            o.optString("url"), o.optString("url"),
-                            "", "{}", "", true));
+                    // Migrate legacy URL-only entries written by older builds.
+                    String url = arr.optString(i, "").trim();
+                    if (!url.isEmpty()) {
+                        externalServers.add(new ExternalServer(url, url, "", "{}", "", true));
+                    }
                 }
             }
         } catch (Exception ignored) {
@@ -1075,10 +1141,17 @@ public class McpServerService extends Service {
             } catch (IOException e) {
                 Log.e(TAG, "cloudflared output stream closed", e);
             }
+            if (MODE_QUICK.equals(mode) && (cloudflaredProcess == null
+                    || !cloudflaredProcess.isAlive())) {
+                DebugLog.log(this, "Svc", "cloudflared exited before a quick-tunnel URL was received");
+                broadcastTunnelInfo(MODE_QUICK, null, false);
+            }
         }).start();
     }
 
-    /** Pulls the random https://*.trycloudflare.com URL out of a cloudflared log line. */
+    /** Pulls the random https://*.trycloudflare.com URL out of a cloudflared log line.
+     *  Handles the plain "Visit it at https://x.trycloudflare.com" line and the
+     *  pipe-wrapped "|  https://x.trycloudflare.com  |" banner format. */
     private String extractTryCloudflareUrl(String line) {
         if (line == null || !line.contains("trycloudflare.com")) return null;
         int i = line.indexOf("https://");
@@ -1086,8 +1159,14 @@ public class McpServerService extends Service {
         int j = i;
         while (j < line.length() && !Character.isWhitespace(line.charAt(j))) j++;
         String url = line.substring(i, j).trim();
-        while (url.endsWith(",") || url.endsWith(".") || url.endsWith(")")) {
-            url = url.substring(0, url.length() - 1).trim();
+        // Strip trailing punctuation the banner format may attach: , . ) | ]
+        while (!url.isEmpty()) {
+            char last = url.charAt(url.length() - 1);
+            if (last == ',' || last == '.' || last == ')' || last == '|' || last == ']') {
+                url = url.substring(0, url.length() - 1).trim();
+            } else {
+                break;
+            }
         }
         return url.isEmpty() ? null : url;
     }

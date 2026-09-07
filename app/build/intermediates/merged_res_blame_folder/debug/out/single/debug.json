@@ -1,26 +1,30 @@
 [
     {
-        "merged": "online.svndev.mcpbridge.app-merged_res-28:/layout_activity_main.xml.flat",
-        "source": "online.svndev.mcpbridge.app-main-30:/layout/activity_main.xml"
+        "merged": "/home/test/.gradle/daemon/8.13/online.svndev.mcpbridge.app-merged_res-32:/mipmap-mdpi_ic_launcher.png.flat",
+        "source": "/home/test/.gradle/daemon/8.13/online.svndev.mcpbridge.app-main-34:/mipmap-mdpi/ic_launcher.png"
     },
     {
-        "merged": "online.svndev.mcpbridge.app-merged_res-28:/mipmap-xhdpi_ic_launcher.png.flat",
-        "source": "online.svndev.mcpbridge.app-main-30:/mipmap-xhdpi/ic_launcher.png"
+        "merged": "/home/test/.gradle/daemon/8.13/online.svndev.mcpbridge.app-merged_res-32:/mipmap-xxhdpi_ic_launcher.png.flat",
+        "source": "/home/test/.gradle/daemon/8.13/online.svndev.mcpbridge.app-main-34:/mipmap-xxhdpi/ic_launcher.png"
     },
     {
-        "merged": "online.svndev.mcpbridge.app-merged_res-28:/mipmap-xxxhdpi_ic_launcher.png.flat",
-        "source": "online.svndev.mcpbridge.app-main-30:/mipmap-xxxhdpi/ic_launcher.png"
+        "merged": "/home/test/.gradle/daemon/8.13/online.svndev.mcpbridge.app-merged_res-32:/mipmap-xxxhdpi_ic_launcher.png.flat",
+        "source": "/home/test/.gradle/daemon/8.13/online.svndev.mcpbridge.app-main-34:/mipmap-xxxhdpi/ic_launcher.png"
     },
     {
-        "merged": "online.svndev.mcpbridge.app-merged_res-28:/mipmap-hdpi_ic_launcher.png.flat",
-        "source": "online.svndev.mcpbridge.app-main-30:/mipmap-hdpi/ic_launcher.png"
+        "merged": "online.svndev.mcpbridge.app-merged_res-32:/layout_activity_main.xml.flat",
+        "source": "online.svndev.mcpbridge.app-main-34:/layout/activity_main.xml"
     },
     {
-        "merged": "online.svndev.mcpbridge.app-merged_res-28:/mipmap-mdpi_ic_launcher.png.flat",
-        "source": "online.svndev.mcpbridge.app-main-30:/mipmap-mdpi/ic_launcher.png"
+        "merged": "/home/test/.gradle/daemon/8.13/online.svndev.mcpbridge.app-merged_res-32:/mipmap-xhdpi_ic_launcher.png.flat",
+        "source": "/home/test/.gradle/daemon/8.13/online.svndev.mcpbridge.app-main-34:/mipmap-xhdpi/ic_launcher.png"
     },
     {
-        "merged": "online.svndev.mcpbridge.app-merged_res-28:/mipmap-xxhdpi_ic_launcher.png.flat",
-        "source": "online.svndev.mcpbridge.app-main-30:/mipmap-xxhdpi/ic_launcher.png"
+        "merged": "/home/test/.gradle/daemon/8.13/online.svndev.mcpbridge.app-merged_res-32:/layout_activity_main.xml.flat",
+        "source": "/home/test/.gradle/daemon/8.13/online.svndev.mcpbridge.app-main-34:/layout/activity_main.xml"
+    },
+    {
+        "merged": "/home/test/.gradle/daemon/8.13/online.svndev.mcpbridge.app-merged_res-32:/mipmap-hdpi_ic_launcher.png.flat",
+        "source": "/home/test/.gradle/daemon/8.13/online.svndev.mcpbridge.app-main-34:/mipmap-hdpi/ic_launcher.png"
     }
 ]

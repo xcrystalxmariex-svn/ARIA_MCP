@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary palette -->
+    <color name="primary">#6366F1</color>
+    <color name="primary_dark">#4F46E5</color>
+    <color name="accent">#8B5CF6</color>
+    
+    <!-- Status colors -->
+    <color name="status_active">#10B981</color>
+    <color name="status_error">#EF4444</color>
+    <color name="status_warning">#F59E0B</color>
+    <color name="status_inactive">#6B7280</color>
+    
+    <!-- Surface colors -->
+    <color name="surface">#FFFFFF</color>
+    <color name="surface_variant">#F3F4F6</color>
+    <color name="card_bg">#FFFFFF</color>
+    <color name="divider">#E5E7EB</color>
+    
+    <!-- Text colors -->
+    <color name="text_primary">#111827</color>
+    <color name="text_secondary">#6B7280</color>
+    <color name="text_on_primary">#FFFFFF</color>
+    
+    <!-- Debug panel -->
+    <color name="debug_bg">#0F172A</color>
+    <color name="debug_text">#E2E8F0</color>
+    <color name="debug_info">#60A5FA</color>
+    <color name="debug_success">#34D399</color>
+    <color name="debug_error">#F87171</color>
+    <color name="debug_warning">#FBBF24</color>
+</resources>

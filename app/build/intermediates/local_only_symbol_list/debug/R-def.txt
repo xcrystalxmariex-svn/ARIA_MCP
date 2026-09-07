@@ -15,6 +15,7 @@ id btnHelpTermux
 id btnHelpTermuxTool
 id btnHelpToken
 id btnManageAllTools
+id btnManageExternalMcp
 id btnTermuxTest
 id chkExternalMcp
 id chkLocalShell

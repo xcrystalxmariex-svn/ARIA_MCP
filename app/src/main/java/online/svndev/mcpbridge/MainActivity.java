@@ -11,6 +11,8 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.Editable;
 import android.text.TextWatcher;
 import android.view.View;
@@ -64,6 +66,17 @@ public class MainActivity extends AppCompatActivity {
     private CheckBox chkLocalShell;
     private CheckBox chkTermux;
     private CheckBox chkExternalMcp;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private boolean termuxTestPending;
+    private final Runnable termuxTestTimeout = new Runnable() {
+        @Override
+        public void run() {
+            if (!termuxTestPending) return;
+            termuxTestPending = false;
+            appendDiagnostic("Termux test FAILED: no response after 12 seconds. Enable Allow external apps in Termux, then retry.");
+            DebugLog.log(MainActivity.this, "UI", "Termux test timed out; check allow-external-apps");
+        }
+    };
 
     // ------------------------------------------------------------------
     // Receivers
@@ -84,7 +97,9 @@ public class MainActivity extends AppCompatActivity {
         public void onReceive(Context context, Intent intent) {
             if (TermuxBridge.ACTION_APP_RESULT.equals(intent.getAction())) {
                 String text = TermuxBridge.extractResultText(intent);
-                appendDiagnostic("Termux: " + text);
+                termuxTestPending = false;
+                mainHandler.removeCallbacks(termuxTestTimeout);
+                appendDiagnostic("Termux test PASS/RESULT: " + text);
                 DebugLog.log(MainActivity.this, "Termux", "Result received: " + text);
             }
         }
@@ -157,15 +172,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void registerReceivers() {
-        registerReceiver(binaryStatusReceiver,
-                new IntentFilter(McpServerService.ACTION_BINARY_STATUS));
-        registerReceiver(termuxResultReceiver,
-                new IntentFilter(TermuxBridge.ACTION_APP_RESULT));
-        registerReceiver(debugLineReceiver,
-                new IntentFilter(DebugLog.ACTION_DEBUG_LINE));
-        registerReceiver(tunnelInfoReceiver,
-                new IntentFilter(McpServerService.ACTION_TUNNEL_INFO));
-    }
+    registerReceiver(binaryStatusReceiver,
+            new IntentFilter(McpServerService.ACTION_BINARY_STATUS));
+    registerReceiver(termuxResultReceiver,
+            new IntentFilter(TermuxBridge.ACTION_APP_RESULT));
+    registerReceiver(debugLineReceiver,
+            new IntentFilter(DebugLog.ACTION_DEBUG_LINE));
+    registerReceiver(tunnelInfoReceiver,
+            new IntentFilter(McpServerService.ACTION_TUNNEL_INFO));
+}
+
 
     private void wireControls() {
         switchServer.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
@@ -296,6 +312,9 @@ public class MainActivity extends AppCompatActivity {
 
         // Add an external MCP server (URL + launch / headers / auth).
         findViewById(R.id.btnAddExternalMcp).setOnClickListener(v -> showAddExternalMcpDialog());
+
+        // Manage connected external MCP servers (view / toggle / remove).
+        findViewById(R.id.btnManageExternalMcp).setOnClickListener(v -> showManageExternalMcpDialog());
 
         // Connection formats reference for 3rd-party LLM wiring.
         findViewById(R.id.btnFormatsRef).setOnClickListener(v -> showFormatsReference());
@@ -1056,27 +1075,33 @@ public class MainActivity extends AppCompatActivity {
     // ------------------------------------------------------------------
 
     private void showFormatsReference() {
-        String message =
-                "Point any LLM system at your unified /mcp endpoint (" +
-                "https://svn-dev.online/mcp). Formats accepted:\n\n" +
-                "1) JSON-RPC POST (tools/list, tools/call)\n" +
-                "   POST https://svn-dev.online/mcp\n" +
-                "   Content-Type: application/json\n" +
-                "   Body: {\"jsonrpc\":\"2.0\",\"method\":\"tools/list\",\"id\":1}\n\n" +
-                "2) SSE stream (Server-Sent Events)\n" +
-                "   GET https://svn-dev.online/mcp\n" +
-                "   Accept: text/event-stream\n" +
-                "   First event carries the endpoint JSON-RPC path.\n\n" +
-                "3) Authorization (optional)\n" +
-                "   When an access code is set, send:\n" +
-                "   Authorization: Bearer <your access code>\n\n" +
-                "Example curl:\n" +
-                "  curl -X POST https://svn-dev.online/mcp \\n" +
-                "    -H 'Content-Type: application/json' \\n" +
-                "    -H 'Authorization: Bearer CODE' \\n" +
-                "    -d '{\"jsonrpc\":\"2.0\",\"method\":\"tools/list\",\"id\":1}'";
-        showCopyableDialog("Connection Formats", message, null);
+    String endpoint = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
+            .getString(KEY_LAST_ENDPOINT, "");
+    if (endpoint.isEmpty()) {
+        endpoint = "https://<your-domain>/mcp";
     }
+    String message =
+            "Point any LLM system at your unified /mcp endpoint (" +
+            endpoint + "). Formats accepted:\n\n" +
+            "1) JSON-RPC POST (tools/list, tools/call)\n" +
+            "   POST " + endpoint + "\n" +
+            "   Content-Type: application/json\n" +
+            "   Body: {\"jsonrpc\":\"2.0\",\"method\":\"tools/list\",\"id\":1}\n\n" +
+            "2) SSE stream (Server-Sent Events)\n" +
+            "   GET " + endpoint + "\n" +
+            "   Accept: text/event-stream\n" +
+            "   First event carries the endpoint JSON-RPC path.\n\n" +
+            "3) Authorization (optional)\n" +
+            "   When an access code is set, send:\n" +
+            "   Authorization: Bearer <your access code>\n\n" +
+            "Example curl:\n" +
+            "  curl -X POST " + endpoint + " \\\\n" +
+            "    -H 'Content-Type: application/json' \\\\n" +
+            "    -H 'Authorization: Bearer CODE' \\\\n" +
+            "    -d '{\"jsonrpc\":\"2.0\",\"method\":\"tools/list\",\"id\":1}'";
+    showCopyableDialog("Connection Formats", message, null);
+}
+
 
     private void notifyServiceReload() {
         Intent i = new Intent(this, McpServerService.class);
@@ -1089,7 +1114,13 @@ public class MainActivity extends AppCompatActivity {
     // ------------------------------------------------------------------
 
     private void refreshBinaryDiagnostic() {
-        File extracted = new File(getFilesDir(), "cloudflared");
+        // Check native library dir first (service's primary path)
+        File libDir = new File(getApplicationInfo().nativeLibraryDir);
+        File binaryFile = new File(libDir, "libcloudflared.so");
+        if (!binaryFile.getParentFile().canWrite()) {
+            binaryFile = new File(getCodeCacheDir(), "libcloudflared.so");
+        }
+        
         try {
             long assetBytes = getAssets().openFd("cloudflared").getLength();
             appendDiagnostic("Bundled asset: " + formatSize(assetBytes)
@@ -1099,11 +1130,12 @@ public class MainActivity extends AppCompatActivity {
             appendDiagnostic("Bundled asset: MISSING from assets/cloudflared");
             DebugLog.log(this, "UI", "Bundled asset MISSING: " + e.getMessage());
         }
-        if (extracted.exists() && extracted.length() > 0) {
-            appendDiagnostic("Extracted copy: " + formatSize(extracted.length())
-                    + (extracted.canExecute() ? " [executable]" : " [NOT executable]"));
+        
+        if (binaryFile.exists() && binaryFile.length() > 0) {
+            appendDiagnostic("Extracted copy: " + formatSize(binaryFile.length())
+                    + (binaryFile.canExecute() ? " [executable]" : " [NOT executable]"));
         } else {
-            appendDiagnostic("Extracted copy: not yet created (start the server to extract)");
+            appendDiagnostic("Extracted copy: not yet created (start server to extract)");
         }
     }
 
@@ -1192,24 +1224,26 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void runTermuxTest() {
-        DebugLog.log(this, "UI", "Termux test button pressed");
-        if (!TermuxBridge.isTermuxInstalled(this)) {
-            appendDiagnostic("Termux test: Termux is NOT installed (get it from F-Droid).");
-            showTermuxSetupDialog();
-            return;
-        }
-        appendDiagnostic("Termux test: dispatching 'echo hello from mcp bridge' ...");
-        String executable = "/data/data/com.termux/files/usr/bin/echo";
-        String[] args = new String[]{"hello from mcp bridge"};
-        android.app.PendingIntent pi = TermuxBridge.buildResultPendingIntent(this, 42);
-        String error = TermuxBridge.sendRunCommand(this, executable, args, null, pi);
-        if (error != null) {
-            appendDiagnostic("Termux test FAILED: " + error);
-            DebugLog.log(this, "UI", "Termux test failed: " + error);
-        } else {
-            DebugLog.log(this, "UI", "Termux test dispatched, awaiting result");
-        }
+    DebugLog.log(this, "UI", "Termux test button pressed");
+    if (!TermuxBridge.isTermuxInstalled(this)) {
+        appendDiagnostic("Termux test: Termux is NOT installed (get it from F-Droid).");
+        showTermuxSetupDialog();
+        return;
     }
+    appendDiagnostic("Termux test: dispatching test command...");
+    // Use /bin/sh -c to avoid missing echo binary issues
+    String executable = "/data/data/com.termux/files/usr/bin/sh";
+    String[] args = new String[]{"-c", "echo 'hello from mcp bridge'"};
+    android.app.PendingIntent pi = TermuxBridge.buildResultPendingIntent(this, (int)System.currentTimeMillis());
+    String error = TermuxBridge.sendRunCommand(this, executable, args, null, pi);
+    if (error != null) {
+        appendDiagnostic("Termux test FAILED: " + error);
+        DebugLog.log(this, "UI", "Termux test failed: " + error);
+    } else {
+        DebugLog.log(this, "UI", "Termux test dispatched, awaiting result");
+    }
+}
+
 
     @Override
     protected void onDestroy() {

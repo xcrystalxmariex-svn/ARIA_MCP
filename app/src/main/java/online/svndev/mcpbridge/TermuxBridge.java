@@ -87,15 +87,21 @@ public final class TermuxBridge {
      * requestCode must differ per in-flight command or the results collide.
      */
     public static PendingIntent buildResultPendingIntent(Context context, int requestCode) {
-        Intent result = new Intent(ACTION_APP_RESULT);
-        result.setPackage(context.getPackageName());
-        // Mutable is required so Termux can attach the plugin-result bundle.
-        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-        if (android.os.Build.VERSION.SDK_INT >= 31) {
-            flags |= 0x02000000; // PendingIntent.FLAG_MUTABLE (API 31+)
-        }
-        return PendingIntent.getBroadcast(context, requestCode, result, flags);
+    Intent result = new Intent(ACTION_APP_RESULT);
+    result.setPackage(context.getPackageName());
+    // Use explicit component to ensure delivery
+    result.setClass(context, MainActivity.class);
+    
+    int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+    if (android.os.Build.VERSION.SDK_INT >= 23) {
+        flags |= PendingIntent.FLAG_IMMUTABLE;
     }
+    if (android.os.Build.VERSION.SDK_INT >= 31) {
+        flags |= PendingIntent.FLAG_MUTABLE; // Termux needs to attach extras
+    }
+    return PendingIntent.getBroadcast(context, requestCode, result, flags);
+}
+
 
     /**
      * Dispatch one background command to Termux.

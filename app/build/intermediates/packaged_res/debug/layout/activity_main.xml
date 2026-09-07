@@ -350,6 +350,13 @@
                 android:layout_marginTop="2dp" />
 
             <Button
+                android:id="@+id/btnManageExternalMcp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Connected External MCP Servers (view / toggle / remove)"
+                android:layout_marginTop="2dp" />
+
+            <Button
                 android:id="@+id/btnFormatsRef"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
