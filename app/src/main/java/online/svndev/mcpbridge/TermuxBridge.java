@@ -94,6 +94,9 @@ public final class TermuxBridge {
     public static PendingIntent buildResultPendingIntent(Context context, int requestCode) {
         Intent result = new Intent(ACTION_APP_RESULT);
         result.setClass(context, TermuxResultReceiver.class);
+        // Tag the round trip so the app can tell this command's result apart from
+        // a retry's, or a stale result arriving after a timeout.
+        result.putExtra(EXTRA_RUN_ID, requestCode);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (android.os.Build.VERSION.SDK_INT >= 23) {
             // Mutable is REQUIRED so Termux can attach the plugin-result bundle;

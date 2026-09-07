@@ -82,7 +82,7 @@
                             android:layout_width="0dp"
                             android:layout_height="wrap_content"
                             android:layout_weight="1"
-                            android:text="Endpoint: not connected"
+                            android:text="ENDPOINT: not connected"
                             android:textColor="@color/primary"
                             android:textSize="13sp"
                             android:fontFamily="monospace" />

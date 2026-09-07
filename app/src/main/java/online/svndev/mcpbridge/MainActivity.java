@@ -68,12 +68,14 @@ public class MainActivity extends AppCompatActivity {
     private CheckBox chkExternalMcp;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private boolean termuxTestPending;
+    private int termuxRequestSeq = 0;
+    private int termuxActiveRunId = -1;
     private final Runnable termuxTestTimeout = new Runnable() {
         @Override
         public void run() {
             if (!termuxTestPending) return;
             termuxTestPending = false;
-            appendDiagnostic("Termux test FAILED: no response after 12 seconds. Enable Allow external apps in Termux, then retry.");
+            appendDiagnostic("Termux test FAILED: no response after 30 seconds. Enable Allow external apps in Termux, then retry.");
             DebugLog.log(MainActivity.this, "UI", "Termux test timed out; check allow-external-apps");
         }
     };
@@ -97,10 +99,14 @@ public class MainActivity extends AppCompatActivity {
         public void onReceive(Context context, Intent intent) {
             if (TermuxBridge.ACTION_APP_RESULT.equals(intent.getAction())) {
                 String text = TermuxBridge.extractResultText(intent);
+                // A result can still legitimately arrive after the watchdog fired
+                // (Termux cold start, slow device). Report it either way - never
+                // silently drop a late response so we always learn the truth.
+                boolean late = !termuxTestPending;
                 termuxTestPending = false;
                 mainHandler.removeCallbacks(termuxTestTimeout);
-                appendDiagnostic("Termux test PASS/RESULT: " + text);
-                DebugLog.log(MainActivity.this, "Termux", "Result received: " + text);
+                appendDiagnostic((late ? "Termux test result (after timeout): " : "Termux test PASS/RESULT: ") + text);
+                DebugLog.log(MainActivity.this, "Termux", "Result received (late=" + late + "): " + text);
             }
         }
     };
@@ -427,28 +433,28 @@ public class MainActivity extends AppCompatActivity {
         String url = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
                 .getString(KEY_LAST_ENDPOINT, "");
         txtEndpoint.setText(url.isEmpty()
-                ? "Endpoint: not connected"
-                : "Endpoint: " + url + " (last known)");
+                ? "ENDPOINT: not connected"
+                : "ENDPOINT: " + url + " (last known)");
     }
 
     private void updateEndpoint(String mode, boolean active, String url) {
         if (txtEndpoint == null) return;
         if (!active) {
-            txtEndpoint.setText("Endpoint: not connected");
+            txtEndpoint.setText("ENDPOINT: not connected");
             return;
         }
         if (MODE_QUICK.equals(mode)) {
             if (url != null && !url.isEmpty()) {
-                txtEndpoint.setText("Endpoint: " + url);
+                txtEndpoint.setText("ENDPOINT: " + url);
                 getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
                         .putString(KEY_LAST_ENDPOINT, url).apply();
                 DebugLog.log(this, "UI", "Endpoint URL live: " + url);
             } else {
-                txtEndpoint.setText("Endpoint: connecting (waiting for trycloudflare URL)...");
+                txtEndpoint.setText("ENDPOINT: connecting (waiting for trycloudflare URL)...");
             }
         } else {
             // Token mode: the public hostname lives in the user's Cloudflare dashboard.
-            txtEndpoint.setText("Endpoint: custom-domain tunnel active (hostname set in Cloudflare)");
+            txtEndpoint.setText("ENDPOINT: custom-domain tunnel active (hostname set in Cloudflare)");
             getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
                     .remove(KEY_LAST_ENDPOINT).apply();
         }
@@ -457,8 +463,8 @@ public class MainActivity extends AppCompatActivity {
     private void copyEndpoint() {
         if (txtEndpoint == null) return;
         String text = txtEndpoint.getText().toString();
-        String url = text.startsWith("Endpoint: ")
-                ? text.substring("Endpoint: ".length()) : text;
+        String url = text.startsWith("ENDPOINT: ")
+                ? text.substring("ENDPOINT: ".length()) : text;
         int idx = url.indexOf(" (");
         if (idx > 0) url = url.substring(0, idx);
         if (url.startsWith("http")) {
@@ -1224,7 +1230,8 @@ public class MainActivity extends AppCompatActivity {
         // Use /bin/sh -c to avoid missing echo binary issues.
         String executable = "/data/data/com.termux/files/usr/bin/sh";
         String[] args = new String[]{"-c", "echo 'hello from mcp bridge'"};
-        android.app.PendingIntent pi = TermuxBridge.buildResultPendingIntent(this, (int) System.currentTimeMillis());
+        termuxActiveRunId = ++termuxRequestSeq;
+        android.app.PendingIntent pi = TermuxBridge.buildResultPendingIntent(this, termuxActiveRunId);
         String error = TermuxBridge.sendRunCommand(this, executable, args, null, pi);
         if (error != null) {
             appendDiagnostic("Termux test FAILED: " + error);
@@ -1232,8 +1239,8 @@ public class MainActivity extends AppCompatActivity {
         } else {
             termuxTestPending = true;
             mainHandler.removeCallbacks(termuxTestTimeout);
-            mainHandler.postDelayed(termuxTestTimeout, 12000L);
-            appendDiagnostic("Termux test: waiting up to 12 seconds for a response...");
+            mainHandler.postDelayed(termuxTestTimeout, 30000L);
+            appendDiagnostic("Termux test: waiting up to 30 seconds for a response...");
             DebugLog.log(this, "UI", "Termux test dispatched, awaiting result");
         }
     }

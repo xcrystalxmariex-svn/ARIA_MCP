@@ -33,6 +33,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -1092,7 +1093,8 @@ if (enableTermux) {
         tunnelMode = MODE_QUICK;
         try {
             ProcessBuilder pb = new ProcessBuilder(binaryFile.getAbsolutePath(),
-                    "tunnel", "--url", "http://127.0.0.1:" + PORT, "--no-autoupdate");
+                    "tunnel", "--url", "http://127.0.0.1:" + PORT,
+                    "--protocol", "http2", "--no-autoupdate");
             pb.redirectErrorStream(true);
             // cloudflared needs a writable HOME (it caches its credentials/config)
             // and TMPDIR; the app process has neither set on Android.
@@ -1113,6 +1115,7 @@ if (enableTermux) {
     /** Streams cloudflared's stdout; in quick mode watches for the assigned URL. */
     private void drainCloudflaredOutput(Process proc, final String mode) {
         new Thread(() -> {
+            final boolean[] urlReceived = {false};
             try (BufferedReader br = new BufferedReader(
                     new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
                 String l;
@@ -1121,6 +1124,7 @@ if (enableTermux) {
                     if (MODE_QUICK.equals(mode)) {
                         String url = extractTryCloudflareUrl(l);
                         if (url != null) {
+                            urlReceived[0] = true;
                             broadcastTunnelInfo(MODE_QUICK, url, true);
                             DebugLog.log(this, "Svc", "Quick tunnel URL: " + url);
                         }
@@ -1131,30 +1135,52 @@ if (enableTermux) {
             }
             if (MODE_QUICK.equals(mode) && (cloudflaredProcess == null
                     || !cloudflaredProcess.isAlive())) {
-                DebugLog.log(this, "Svc", "cloudflared exited before a quick-tunnel URL was received");
-                broadcastTunnelInfo(MODE_QUICK, null, false);
+                if (!urlReceived[0]) {
+                    DebugLog.log(this, "Svc", "cloudflared exited before a quick-tunnel URL was received");
+                    broadcastTunnelInfo(MODE_QUICK, null, false);
+                } else {
+                    // Keep the assigned URL on screen - do not wipe it with a
+                    // 'not connected' broadcast after the process stops.
+                    DebugLog.log(this, "Svc", "cloudflared tunnel process ended (URL was assigned)");
+                }
             }
         }).start();
     }
 
-    /** Pulls the random https://*.trycloudflare.com URL out of a cloudflared log line.
-     *  Handles the plain "Visit it at https://x.trycloudflare.com" line and the
-     *  pipe-wrapped "|  https://x.trycloudflare.com  |" banner format. */
+    /** Pulls the ASSIGNED random https://*.trycloudflare.com tunnel URL out of a
+     *  cloudflared log line, ignoring the api.trycloudflare.com registration
+     *  endpoint it is shouting next to on some network paths.
+     *
+     *  cloudflared prints the banner:
+     *      |  https://<random>.trycloudflare.com  |
+     *  before the registration request. That random host is the real public
+     *  tunnel endpoint we advertise; any api.trycloudflare.com/... URL is the
+     *  backend we talk to, never the tunnel we expose. */
     private String extractTryCloudflareUrl(String line) {
         if (line == null || !line.contains("trycloudflare.com")) return null;
-        int i = line.indexOf("https://");
+        String lower = line.toLowerCase(Locale.US);
+        // Skip the registration API host explicitly so an error line such as
+        // "https://api.trycloudflare.com/tunnel ..." is never captured.
+        if (lower.contains("api.trycloudflare.com/")) return null;
+        int i = lower.indexOf("https://");
         if (i < 0) return null;
         int j = i;
         while (j < line.length() && !Character.isWhitespace(line.charAt(j))) j++;
         String url = line.substring(i, j).trim();
-        // Strip trailing punctuation the banner format may attach: , . ) | ]
+        // Strip trailing punctuation the banner format may attach: , . ) | ] "
         while (!url.isEmpty()) {
             char last = url.charAt(url.length() - 1);
-            if (last == ',' || last == '.' || last == ')' || last == '|' || last == ']') {
+            if (last == ',' || last == '.' || last == ')' || last == '|'
+                    || last == ']' || last == '"') {
                 url = url.substring(0, url.length() - 1).trim();
             } else {
                 break;
             }
+        }
+        // Only accept an actual assigned tunnel host: <something>.trycloudflare.com,
+        // never a bare api./dash. subdomain.
+        if (!url.toLowerCase(Locale.US).matches("https://[a-z0-9.-]+\\.trycloudflare\\.com/?.*")) {
+            return null;
         }
         return url.isEmpty() ? null : url;
     }
