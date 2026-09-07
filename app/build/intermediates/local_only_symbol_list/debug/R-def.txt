@@ -1,0 +1,35 @@
+R_DEF: Internal format may change without notice
+local
+id btnAddCustomTool
+id btnAddExternalMcp
+id btnCopyEndpoint
+id btnDebugClear
+id btnDebugCopy
+id btnFormatsRef
+id btnHelpAuth
+id btnHelpExternal
+id btnHelpOracle
+id btnHelpServer
+id btnHelpShell
+id btnHelpTermux
+id btnHelpTermuxTool
+id btnHelpToken
+id btnManageAllTools
+id btnTermuxTest
+id chkExternalMcp
+id chkLocalShell
+id chkOracleDb
+id chkTermux
+id editAuthCode
+id editToken
+id rbModeQuick
+id rbModeToken
+id rgTunnelMode
+id scrollDebug
+id switchServer
+id txtDebugLog
+id txtDiagnostic
+id txtEndpoint
+layout activity_main
+mipmap ic_launcher
+string app_name

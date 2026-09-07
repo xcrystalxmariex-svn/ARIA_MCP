@@ -1,0 +1,407 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:padding="12dp">
+
+    <!-- Scrollable content area (everything except the pinned debug panel) -->
+    <ScrollView
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingBottom="8dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="MCP Universal Multiplexer"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginBottom="10dp" />
+
+            <!-- Server switch row with help button -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="6dp">
+
+                <com.google.android.material.switchmaterial.SwitchMaterial
+                    android:id="@+id/switchServer"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Server Status: Stopped"
+                    android:textSize="15sp" />
+
+                <Button
+                    android:id="@+id/btnHelpServer"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="?"
+                    android:minWidth="48dp"
+                    android:minHeight="40dp"
+                    android:contentDescription="Help: server switch" />
+            </LinearLayout>
+
+            <!-- Token row with help button -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
+
+                <EditText
+                    android:id="@+id/editToken"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="Cloudflare Tunnel Token"
+                    android:inputType="text"
+                    android:textSize="14sp" />
+
+                <Button
+                    android:id="@+id/btnHelpToken"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="?"
+                    android:minWidth="48dp"
+                    android:minHeight="40dp"
+                    android:contentDescription="Help: tunnel token" />
+            </LinearLayout>
+
+            <!-- Live endpoint line + copy -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+
+                <TextView
+                    android:id="@+id/txtEndpoint"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Endpoint: not connected"
+                    android:textColor="#3F51B5"
+                    android:textSize="12sp" />
+
+                <Button
+                    android:id="@+id/btnCopyEndpoint"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Copy URL"
+                    android:minWidth="0dp"
+                    android:minHeight="0dp"
+                    android:paddingLeft="8dp"
+                    android:paddingRight="8dp"
+                    android:textSize="12sp"
+                    android:contentDescription="Copy current endpoint URL" />
+            </LinearLayout>
+
+            <!-- Connection setup (tunnel mode + access code) -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Connection Setup"
+                android:textStyle="bold"
+                android:textSize="15sp" />
+
+            <RadioGroup
+                android:id="@+id/rgTunnelMode"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp">
+
+                <RadioButton
+                    android:id="@+id/rbModeToken"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="My Cloudflare token / custom domain"
+                    android:textSize="14sp" />
+
+                <RadioButton
+                    android:id="@+id/rbModeQuick"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="Random trycloudflare URL (no domain needed)"
+                    android:textSize="14sp" />
+            </RadioGroup>
+
+            <!-- Access code row with help -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="4dp">
+
+                <EditText
+                    android:id="@+id/editAuthCode"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:hint="Optional access code (Bearer auth) - blank = open"
+                    android:inputType="textPassword"
+                    android:textSize="14sp" />
+
+                <Button
+                    android:id="@+id/btnHelpAuth"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="?"
+                    android:minWidth="48dp"
+                    android:minHeight="40dp"
+                    android:contentDescription="Help: access code" />
+            </LinearLayout>
+
+            <!-- Termux test row with help button -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="10dp">
+
+                <Button
+                    android:id="@+id/btnTermuxTest"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Test Termux RUN_COMMAND" />
+
+                <Button
+                    android:id="@+id/btnHelpTermux"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="?"
+                    android:minWidth="48dp"
+                    android:minHeight="40dp"
+                    android:contentDescription="Help: Termux setup" />
+            </LinearLayout>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Diagnostic:"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+
+            <TextView
+                android:id="@+id/txtDiagnostic"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Checking binary..."
+                android:fontFamily="monospace"
+                android:textSize="11sp"
+                android:padding="8dp"
+                android:background="#11000000"
+                android:layout_marginBottom="10dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Active Tools Integration Toggle"
+                android:textStyle="bold"
+                android:layout_marginBottom="2dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Tap ? next to a tool for help."
+                android:textSize="12sp"
+                android:textColor="#666666"
+                android:layout_marginBottom="6dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <CheckBox
+                    android:id="@+id/chkOracleDb"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Local Oracle DB JS Engine"
+                    android:checked="true" />
+
+                <Button
+                    android:id="@+id/btnHelpOracle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="?"
+                    android:minWidth="40dp"
+                    android:minHeight="36dp"
+                    android:contentDescription="Help: Oracle JS engine" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <CheckBox
+                    android:id="@+id/chkLocalShell"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Device Native Process Shell"
+                    android:checked="false" />
+
+                <Button
+                    android:id="@+id/btnHelpShell"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="?"
+                    android:minWidth="40dp"
+                    android:minHeight="36dp"
+                    android:contentDescription="Help: native shell" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <CheckBox
+                    android:id="@+id/chkTermux"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Termux Native App Bridge"
+                    android:checked="false" />
+
+                <Button
+                    android:id="@+id/btnHelpTermuxTool"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="?"
+                    android:minWidth="40dp"
+                    android:minHeight="36dp"
+                    android:contentDescription="Help: Termux tool" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical">
+
+                <CheckBox
+                    android:id="@+id/chkExternalMcp"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="External Secondary MCP"
+                    android:checked="false" />
+
+                <Button
+                    android:id="@+id/btnHelpExternal"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="?"
+                    android:minWidth="40dp"
+                    android:minHeight="36dp"
+                    android:contentDescription="Help: external MCP" />
+            </LinearLayout>
+
+            <!-- Add Custom Tool + External MCP URL + formats reference -->
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Custom Tools &amp; Aggregation"
+                android:textStyle="bold"
+                android:textSize="15sp"
+                android:layout_marginTop="8dp" />
+
+            <Button
+                android:id="@+id/btnAddCustomTool"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Add Custom Tool (JS snippet or shell command)"
+                android:layout_marginTop="2dp" />
+
+            <Button
+                android:id="@+id/btnManageAllTools"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Manage All Tools (view / toggle / delete)"
+                android:layout_marginTop="2dp" />
+
+            <Button
+                android:id="@+id/btnAddExternalMcp"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Add External MCP Server (URL / launch / headers / auth)"
+                android:layout_marginTop="2dp" />
+
+            <Button
+                android:id="@+id/btnFormatsRef"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Connection Formats (reference for 3rd-party LLM wiring)"
+                android:layout_marginTop="2dp" />
+
+        </LinearLayout>
+    </ScrollView>
+
+    <!-- Pinned Debug / Live trace panel -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Debug / Live Trace"
+        android:textStyle="bold"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="2dp" />
+
+    <ScrollView
+        android:id="@+id/scrollDebug"
+        android:layout_width="match_parent"
+        android:layout_height="120dp"
+        android:background="#11000000">
+
+        <TextView
+            android:id="@+id/txtDebugLog"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:fontFamily="monospace"
+            android:textSize="9sp"
+            android:padding="6dp"
+            android:text="(debug log will appear here)" />
+    </ScrollView>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="4dp">
+
+        <Button
+            android:id="@+id/btnDebugClear"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Clear Log" />
+
+        <Button
+            android:id="@+id/btnDebugCopy"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Copy Log" />
+    </LinearLayout>
+</LinearLayout>

@@ -1,0 +1,120 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="online.svndev.mcpbridge"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="23"
+8-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml
+9        android:targetSdkVersion="33" />
+9-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:4:5-67
+11-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:4:22-64
+12    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+12-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:5:5-79
+12-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:5:22-76
+13    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+13-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:6:5-77
+13-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:6:22-74
+14    <!-- Android 13+ runtime permission for posting notifications -->
+15    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+15-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:8:5-77
+15-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:8:22-74
+16    <!-- Termux integration permission -->
+17    <uses-permission android:name="com.termux.permission.RUN_COMMAND" />
+17-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:10:5-73
+17-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:10:22-70
+18
+19    <!--
+20         Android 11+ package visibility: without this, getPackageInfo/resolveService
+21         for com.termux throws NameNotFoundException and Termux is wrongly reported
+22         as not installed even though it is present on the device.
+23    -->
+24    <queries>
+24-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:15:5-17:15
+25        <package android:name="com.termux" />
+25-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:16:9-46
+25-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:16:18-43
+26    </queries>
+27
+28    <permission
+28-->[androidx.core:core:1.9.0] /home/test/.gradle/caches/8.13/transforms/8ef580f106fb3d526dd3a66ff4b07b1d/transformed/core-1.9.0/AndroidManifest.xml:22:5-24:47
+29        android:name="online.svndev.mcpbridge.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+29-->[androidx.core:core:1.9.0] /home/test/.gradle/caches/8.13/transforms/8ef580f106fb3d526dd3a66ff4b07b1d/transformed/core-1.9.0/AndroidManifest.xml:23:9-81
+30        android:protectionLevel="signature" />
+30-->[androidx.core:core:1.9.0] /home/test/.gradle/caches/8.13/transforms/8ef580f106fb3d526dd3a66ff4b07b1d/transformed/core-1.9.0/AndroidManifest.xml:24:9-44
+31
+32    <uses-permission android:name="online.svndev.mcpbridge.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+32-->[androidx.core:core:1.9.0] /home/test/.gradle/caches/8.13/transforms/8ef580f106fb3d526dd3a66ff4b07b1d/transformed/core-1.9.0/AndroidManifest.xml:26:5-97
+32-->[androidx.core:core:1.9.0] /home/test/.gradle/caches/8.13/transforms/8ef580f106fb3d526dd3a66ff4b07b1d/transformed/core-1.9.0/AndroidManifest.xml:26:22-94
+33
+34    <application
+34-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:19:5-38:19
+35        android:allowBackup="true"
+35-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:20:9-35
+36        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+36-->[androidx.core:core:1.9.0] /home/test/.gradle/caches/8.13/transforms/8ef580f106fb3d526dd3a66ff4b07b1d/transformed/core-1.9.0/AndroidManifest.xml:28:18-86
+37        android:debuggable="true"
+38        android:extractNativeLibs="false"
+39        android:icon="@mipmap/ic_launcher"
+39-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:21:9-43
+40        android:label="Universal MCP Bridge"
+40-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:22:9-45
+41        android:theme="@style/Theme.AppCompat.Light.DarkActionBar" >
+41-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:23:9-67
+42        <activity
+42-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:25:9-31:20
+43            android:name="online.svndev.mcpbridge.MainActivity"
+43-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:25:19-47
+44            android:exported="true" >
+44-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:26:13-36
+45            <intent-filter>
+45-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:27:13-30:29
+46                <action android:name="android.intent.action.MAIN" />
+46-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:28:17-69
+46-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:28:25-66
+47
+48                <category android:name="android.intent.category.LAUNCHER" />
+48-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:29:17-77
+48-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:29:27-74
+49            </intent-filter>
+50        </activity>
+51
+52        <service
+52-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:33:9-37:56
+53            android:name="online.svndev.mcpbridge.McpServerService"
+53-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:34:13-45
+54            android:enabled="true"
+54-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:35:13-35
+55            android:exported="false"
+55-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:36:13-37
+56            android:foregroundServiceType="dataSync" />
+56-->/storage/internal_new/project/ARIA_MCP/app/src/main/AndroidManifest.xml:37:13-53
+57
+58        <provider
+58-->[androidx.emoji2:emoji2:1.2.0] /home/test/.gradle/caches/8.13/transforms/deb1c979403a688ccdf9815a0972b7d8/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:24:9-32:20
+59            android:name="androidx.startup.InitializationProvider"
+59-->[androidx.emoji2:emoji2:1.2.0] /home/test/.gradle/caches/8.13/transforms/deb1c979403a688ccdf9815a0972b7d8/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:25:13-67
+60            android:authorities="online.svndev.mcpbridge.androidx-startup"
+60-->[androidx.emoji2:emoji2:1.2.0] /home/test/.gradle/caches/8.13/transforms/deb1c979403a688ccdf9815a0972b7d8/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:26:13-68
+61            android:exported="false" >
+61-->[androidx.emoji2:emoji2:1.2.0] /home/test/.gradle/caches/8.13/transforms/deb1c979403a688ccdf9815a0972b7d8/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:27:13-37
+62            <meta-data
+62-->[androidx.emoji2:emoji2:1.2.0] /home/test/.gradle/caches/8.13/transforms/deb1c979403a688ccdf9815a0972b7d8/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:29:13-31:52
+63                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+63-->[androidx.emoji2:emoji2:1.2.0] /home/test/.gradle/caches/8.13/transforms/deb1c979403a688ccdf9815a0972b7d8/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:30:17-75
+64                android:value="androidx.startup" />
+64-->[androidx.emoji2:emoji2:1.2.0] /home/test/.gradle/caches/8.13/transforms/deb1c979403a688ccdf9815a0972b7d8/transformed/jetified-emoji2-1.2.0/AndroidManifest.xml:31:17-49
+65            <meta-data
+65-->[androidx.lifecycle:lifecycle-process:2.4.1] /home/test/.gradle/caches/8.13/transforms/c22ddd18cbd47c90d5cea0a17226bc3e/transformed/jetified-lifecycle-process-2.4.1/AndroidManifest.xml:31:13-33:52
+66                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+66-->[androidx.lifecycle:lifecycle-process:2.4.1] /home/test/.gradle/caches/8.13/transforms/c22ddd18cbd47c90d5cea0a17226bc3e/transformed/jetified-lifecycle-process-2.4.1/AndroidManifest.xml:32:17-78
+67                android:value="androidx.startup" />
+67-->[androidx.lifecycle:lifecycle-process:2.4.1] /home/test/.gradle/caches/8.13/transforms/c22ddd18cbd47c90d5cea0a17226bc3e/transformed/jetified-lifecycle-process-2.4.1/AndroidManifest.xml:33:17-49
+68        </provider>
+69    </application>
+70
+71</manifest>

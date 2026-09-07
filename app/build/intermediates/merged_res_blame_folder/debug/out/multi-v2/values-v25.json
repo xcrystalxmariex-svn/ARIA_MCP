@@ -1,0 +1,20 @@
+{
+    "logs": [
+        {
+            "outputFile": "online.svndev.mcpbridge.app-mergeDebugResources-26:/values-v25/values-v25.xml",
+            "map": [
+                {
+                    "source": "/home/test/.gradle/caches/8.13/transforms/696cd4b98832a8da99ddd9626b567dd8/transformed/appcompat-1.6.1/res/values-v25/values-v25.xml",
+                    "from": {
+                        "startLines": "2,3,4,6",
+                        "startColumns": "4,4,4,4",
+                        "startOffsets": "55,126,209,308",
+                        "endLines": "2,3,5,7",
+                        "endColumns": "70,82,12,12",
+                        "endOffsets": "121,204,303,414"
+                    }
+                }
+            ]
+        }
+    ]
+}
