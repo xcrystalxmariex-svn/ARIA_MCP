@@ -1,5 +1,9 @@
 plugins {
     id 'com.android.application'
+    // Embeds a Python 3 runtime so custom tools of type "python" can run.
+    // Requires the Android NDK (r23+) in the build environment. If your build
+    // toolchain has no NDK, remove this line to build without Python support.
+    id 'com.chaquo.python'
 }
 
 android {
@@ -33,4 +37,11 @@ dependencies {
     implementation 'androidx.cardview:cardview:1.0.0'
     // Rhino JS Engine for local script evaluation
     implementation 'org.mozilla:rhino:1.7.13'
+}
+
+// Chaquopy Python runtime configuration (only active when the plugin applies).
+python {
+    // 3.8 keeps 32-bit ABI support and matches minSdk 23; bump to a newer
+    // release if you only target 64-bit devices.
+    version "3.8"
 }

@@ -108,9 +108,27 @@ public class McpServerService extends Service {
                 Log.i(TAG, "Termux result: " + text);
                 DebugLog.log(context, "Svc", "Termux result: " + text);
                 notifyTermuxResult(text);
+                // Complete any synchronous MCP tool call waiting on this run.
+                int runId = intent.getIntExtra(TermuxBridge.EXTRA_RUN_ID, -1);
+                if (runId != -1) {
+                    PendingTermuxCall pending = termuxPending.remove(runId);
+                    if (pending != null) {
+                        pending.result = text;
+                        pending.latch.countDown();
+                    }
+                }
             }
         }
     };
+
+    /** Tracks in-flight Termux RUN_COMMAND calls so a synchronous MCP tool
+     *  call can wait for the real output instead of returning an ack. */
+    private static class PendingTermuxCall {
+        final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        volatile String result;
+    }
+    private final java.util.concurrent.ConcurrentHashMap<Integer, PendingTermuxCall> termuxPending =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
     @Override
     public void onCreate() {
@@ -575,7 +593,7 @@ if (enableTermux) {
                             .put("properties", new JSONObject()
                                 .put("name", new JSONObject().put("type", "string"))
                                 .put("description", new JSONObject().put("type", "string"))
-                                .put("type", new JSONObject().put("type", "string").put("enum", new JSONArray().put("js").put("shell")))
+                                .put("type", new JSONObject().put("type", "string").put("enum", new JSONArray().put("js").put("shell").put("python")))
                                 .put("code", new JSONObject().put("type", "string"))
                                 .put("schema", new JSONObject().put("type", "string").put("description", "Optional JSON Schema string describing how to call this custom tool")))
                             .put("required", new JSONArray().put("name").put("code"))));
@@ -635,7 +653,7 @@ if (enableTermux) {
                 } else if ("custom_tool_add".equals(name)) {
                     String cname = toolArgs.optString("name");
                     String cdesc = toolArgs.optString("description", "Custom tool");
-                    String ctype = toolArgs.optString("type", "js"); // js | shell
+                    String ctype = toolArgs.optString("type", "js"); // js | shell | python
                     String ccode = toolArgs.optString("code");
                     String cschema = toolArgs.optString("schema", "");
                     customTools.add(new CustomTool(cname, cdesc, ctype, ccode, true, cschema));
@@ -759,10 +777,89 @@ if (enableTermux) {
             // space-joined rendering of all non-empty argument values.
             return runLocalProcess(t.code + " " + renderShellArgs(args));
         }
+        if ("python".equals(t.type)) {
+            // Python via the Chaquopy engine. The user's script runs in the
+            // mcp_orchestrator module with the LLM arguments exposed as the
+            // dict 'input'; scripts assign their answer to 'result' (and may
+            // also print to stdout, which is captured).
+            return runPythonTool(t.code, args.toString());
+        }
         // JS: expose the full JSON arguments object as the global 'input' so the
         // snippet can read them, matching the advertised inputSchema.
         String jsonInput = args.toString();
         return executeEmbeddedJsWithInput(t.code, jsonInput);
+    }
+
+    // -------------------------------------------------------------------
+    //  Python (Chaquopy) execution. Accessed via reflection so this class
+    //  still compiles and runs if the com.chaquo.python plugin is not
+    //  applied to the build (Python tools then report a clear error).
+    // -------------------------------------------------------------------
+
+    private boolean pythonChecked = false;
+    private boolean pythonAvailable = false;
+
+    private void checkPython() {
+        try {
+            Class<?> py = Class.forName("com.chaquo.python.Python");
+            boolean started = ((Boolean) py.getMethod("isStarted").invoke(null)).booleanValue();
+            if (!started) {
+                // Chaquopy requires start() on the main thread; we may be on a
+                // worker thread here, so bounce to the main looper and wait.
+                final Class<?> pyClass = py;
+                final java.util.concurrent.CountDownLatch latch =
+                        new java.util.concurrent.CountDownLatch(1);
+                final boolean[] ok = { false };
+                new android.os.Handler(android.os.Looper.getMainLooper())
+                        .post(new Runnable() {
+                            @Override
+                            public void run() {
+                                try {
+                                    pyClass.getMethod("start", android.content.Context.class)
+                                            .invoke(null, McpServerService.this);
+                                    ok[0] = true;
+                                } catch (Throwable t) {
+                                    ok[0] = false;
+                                }
+                                latch.countDown();
+                            }
+                        });
+                try {
+                    latch.await(20, java.util.concurrent.TimeUnit.SECONDS);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+                pythonAvailable = ok[0];
+            } else {
+                pythonAvailable = true;
+            }
+        } catch (Throwable t) {
+            pythonAvailable = false;
+        } finally {
+            pythonChecked = true;
+        }
+    }
+
+    private String runPythonTool(String code, String argsJson) {
+        if (!pythonChecked) checkPython();
+        if (!pythonAvailable) {
+            return "Python error: the Chaquopy engine is not available in this build "
+                    + "(apply the com.chaquo.python plugin, or check the logs for a "
+                    + "startup failure).";
+        }
+        try {
+            Class<?> py = Class.forName("com.chaquo.python.Python");
+            Object inst = py.getMethod("getInstance").invoke(null);
+            Object orch = py.getMethod("getModule", String.class)
+                    .invoke(inst, "mcp_orchestrator");
+            Object res = orch.getClass()
+                    .getMethod("callAttr", String.class, Object[].class)
+                    .invoke(orch, "run_tool",
+                            new Object[]{ code, argsJson == null ? "" : argsJson });
+            return res == null ? "null" : res.toString();
+        } catch (Throwable t) {
+            return "Python error: " + t.getMessage();
+        }
     }
 
     /** Space-joins string argument values for a shell custom tool. */
@@ -1184,14 +1281,31 @@ if (enableTermux) {
         String[] args = new String[tokens.length - 1];
         System.arraycopy(tokens, 1, args, 0, tokens.length - 1);
 
-        PendingIntent pi = TermuxBridge.buildResultPendingIntent(this, (int) System.currentTimeMillis());
+        int runId = (int) (System.currentTimeMillis() & 0x7fffffff);
+        PendingTermuxCall pending = new PendingTermuxCall();
+        termuxPending.put(runId, pending);
+
+        PendingIntent pi = TermuxBridge.buildResultPendingIntent(this, runId);
         String error = TermuxBridge.sendRunCommand(this, executable, args, null, pi);
         if (error != null) {
+            termuxPending.remove(runId);
             return error;
         }
-        // The actual output arrives asynchronously via termuxResultReceiver and
-        // is also posted as a notification. Return an immediate ack here.
-        return "Command dispatched to Termux (background). Result will arrive via notification.";
+
+        // Block until the result arrives (or the timeout elapses) so the MCP
+        // tool call returns the ACTUAL command output instead of an ack.
+        try {
+            pending.latch.await(20, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
+        termuxPending.remove(runId);
+        if (pending.result != null) {
+            return pending.result;
+        }
+        return "Timed out waiting for Termux result. Check that the command is valid "
+                + "and that this app is allowed in Termux (Settings -> Allow external apps "
+                + "or allow-external-apps=true in ~/.termux/termux.properties).";
     }
 
     private void notifyTermuxResult(String text) {

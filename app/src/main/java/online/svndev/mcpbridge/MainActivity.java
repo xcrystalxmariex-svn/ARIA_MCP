@@ -572,22 +572,25 @@ public class MainActivity extends AppCompatActivity {
         int pad = (int) (16 * getResources().getDisplayMetrics().density);
         layout.setPadding(pad, pad / 2, pad, 0);
 
+        layout.addView(makeDialogLabel("Tool name"));
         final EditText nameInput = new EditText(this);
-        nameInput.setHint("Tool name (e.g. my_script)");
+        nameInput.setHint("e.g. web_search");
         layout.addView(nameInput);
 
+        layout.addView(makeDialogLabel("Description (shown to the LLM)"));
         final EditText descInput = new EditText(this);
-        descInput.setHint("Description shown to the LLM");
+        descInput.setHint("e.g. Searches the web and returns result titles + URLs");
         layout.addView(descInput);
 
+        layout.addView(makeDialogLabel("JSON schema (optional) - tells the LLM how to call this tool"));
         final EditText schemaInput = new EditText(this);
-        schemaInput.setHint("JSON schema (optional) - tells the LLM how to call this tool, e.g. "
-                + "{\"type\":\"object\",\"properties\":{\"msg\":{\"type\":\"string\"}}}");
+        schemaInput.setHint("{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\"}}}");
         schemaInput.setMinLines(3);
         schemaInput.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
         schemaInput.setTypeface(android.graphics.Typeface.MONOSPACE);
         layout.addView(schemaInput);
 
+        layout.addView(makeDialogLabel("Engine"));
         final RadioGroup typeGroup = new RadioGroup(this);
         final android.widget.RadioButton jsRadio = new android.widget.RadioButton(this);
         jsRadio.setText("JavaScript snippet (Rhino engine)");
@@ -597,14 +600,17 @@ public class MainActivity extends AppCompatActivity {
         shellRadio.setText("Shell command (Runtime.exec)");
         shellRadio.setId(android.view.View.generateViewId());
         typeGroup.addView(shellRadio);
+        final android.widget.RadioButton pyRadio = new android.widget.RadioButton(this);
+        pyRadio.setText("Python script (Chaquopy engine)");
+        pyRadio.setId(android.view.View.generateViewId());
+        typeGroup.addView(pyRadio);
         jsRadio.setChecked(true);
         layout.addView(typeGroup);
 
+        layout.addView(makeDialogLabel("Code / script"));
         final EditText codeInput = new EditText(this);
-        codeInput.setHint(jsRadio.isChecked()
-                ? "JS snippet, e.g. (function(){ return { answer: 42 }; })()"
-                : "Shell command, e.g. echo hello");
-        codeInput.setMinLines(4);
+        codeInput.setHint("JS: (function(){ return { answer: 42 }; })()  |  Shell: echo hello  |  Python: print('hello')");
+        codeInput.setMinLines(6);
         codeInput.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
         codeInput.setTypeface(android.graphics.Typeface.MONOSPACE);
         layout.addView(codeInput);
@@ -612,15 +618,27 @@ public class MainActivity extends AppCompatActivity {
         typeGroup.setOnCheckedChangeListener(new RadioGroup.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(RadioGroup group, int checkedId) {
-                codeInput.setHint(checkedId == shellRadio.getId()
-                        ? "Shell command, e.g. echo hello"
-                        : "JS snippet, e.g. (function(){ return { answer: 42 }; })()");
+                if (checkedId == shellRadio.getId()) {
+                    codeInput.setHint("Shell command, e.g. echo hello");
+                } else if (checkedId == pyRadio.getId()) {
+                    codeInput.setHint("Python script, e.g. print('hello')");
+                } else {
+                    codeInput.setHint("JS snippet, e.g. (function(){ return { answer: 42 }; })()");
+                }
             }
         });
 
+        // Wrap in a ScrollView so no field is ever clipped off-screen on small
+        // screens (the schema box added in a prior update pushed the code box
+        // below the dialog's fixed height, which made saves fail with
+        // "Name and code are required" even when text was present).
+        android.widget.ScrollView scroll = new android.widget.ScrollView(this);
+        scroll.setFillViewport(true);
+        scroll.addView(layout);
+
         new AlertDialog.Builder(this)
                 .setTitle("Add Custom Tool")
-                .setView(layout)
+                .setView(scroll)
                 .setPositiveButton("Save", new android.content.DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(android.content.DialogInterface d, int which) {
@@ -628,9 +646,14 @@ public class MainActivity extends AppCompatActivity {
                         String desc = descInput.getText().toString().trim();
                         String code = codeInput.getText().toString().trim();
                         String schema = schemaInput.getText().toString().trim();
-                        if (name.isEmpty() || code.isEmpty()) {
+                        if (name.isEmpty()) {
                             Toast.makeText(MainActivity.this,
-                                    "Name and code are required", Toast.LENGTH_SHORT).show();
+                                    "Tool name is required", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        if (code.isEmpty()) {
+                            Toast.makeText(MainActivity.this,
+                                    "Code / script is required", Toast.LENGTH_SHORT).show();
                             return;
                         }
                         if (!schema.isEmpty()) {
@@ -642,7 +665,8 @@ public class MainActivity extends AppCompatActivity {
                                 return;
                             }
                         }
-                        String type = shellRadio.isChecked() ? "shell" : "js";
+                        String type = shellRadio.isChecked() ? "shell"
+                                : (pyRadio.isChecked() ? "python" : "js");
                         saveCustomToolToPrefs(name, desc, type, code, schema);
                         Toast.makeText(MainActivity.this,
                                 "Custom tool '" + name + "' saved", Toast.LENGTH_SHORT).show();
@@ -651,6 +675,16 @@ public class MainActivity extends AppCompatActivity {
                 })
                 .setNegativeButton("Cancel", null)
                 .show();
+    }
+
+    private android.widget.TextView makeDialogLabel(String text) {
+        android.widget.TextView tv = new android.widget.TextView(this);
+        tv.setText(text);
+        tv.setTextSize(12);
+        tv.setTypeface(tv.getTypeface(), android.graphics.Typeface.BOLD);
+        int p = (int) (6 * getResources().getDisplayMetrics().density);
+        tv.setPadding(0, p, 0, 0);
+        return tv;
     }
 
     private void saveCustomToolToPrefs(String name, String desc, String type, String code, String schema) {

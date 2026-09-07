@@ -1,3 +1,7 @@
 plugins {
     id 'com.android.application' version '7.4.2' apply false
+    // Chaquopy 15.0.1 supports AGP 7.0 - 8.5 (this project uses 7.4.2).
+    // Required only if you build with Python custom tools enabled; the app
+    // still compiles without it because Python calls are made via reflection.
+    id 'com.chaquo.python' version '15.0.1' apply false
 }
