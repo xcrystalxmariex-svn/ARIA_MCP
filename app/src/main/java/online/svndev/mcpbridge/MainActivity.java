@@ -1224,25 +1224,29 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void runTermuxTest() {
-    DebugLog.log(this, "UI", "Termux test button pressed");
-    if (!TermuxBridge.isTermuxInstalled(this)) {
-        appendDiagnostic("Termux test: Termux is NOT installed (get it from F-Droid).");
-        showTermuxSetupDialog();
-        return;
+        DebugLog.log(this, "UI", "Termux test button pressed");
+        if (!TermuxBridge.isTermuxInstalled(this)) {
+            appendDiagnostic("Termux test: Termux is NOT installed (get it from F-Droid).");
+            showTermuxSetupDialog();
+            return;
+        }
+        appendDiagnostic("Termux test: dispatching test command...");
+        // Use /bin/sh -c to avoid missing echo binary issues.
+        String executable = "/data/data/com.termux/files/usr/bin/sh";
+        String[] args = new String[]{"-c", "echo 'hello from mcp bridge'"};
+        android.app.PendingIntent pi = TermuxBridge.buildResultPendingIntent(this, (int) System.currentTimeMillis());
+        String error = TermuxBridge.sendRunCommand(this, executable, args, null, pi);
+        if (error != null) {
+            appendDiagnostic("Termux test FAILED: " + error);
+            DebugLog.log(this, "UI", "Termux test failed: " + error);
+        } else {
+            termuxTestPending = true;
+            mainHandler.removeCallbacks(termuxTestTimeout);
+            mainHandler.postDelayed(termuxTestTimeout, 12000L);
+            appendDiagnostic("Termux test: waiting up to 12 seconds for a response...");
+            DebugLog.log(this, "UI", "Termux test dispatched, awaiting result");
+        }
     }
-    appendDiagnostic("Termux test: dispatching test command...");
-    // Use /bin/sh -c to avoid missing echo binary issues
-    String executable = "/data/data/com.termux/files/usr/bin/sh";
-    String[] args = new String[]{"-c", "echo 'hello from mcp bridge'"};
-    android.app.PendingIntent pi = TermuxBridge.buildResultPendingIntent(this, (int)System.currentTimeMillis());
-    String error = TermuxBridge.sendRunCommand(this, executable, args, null, pi);
-    if (error != null) {
-        appendDiagnostic("Termux test FAILED: " + error);
-        DebugLog.log(this, "UI", "Termux test failed: " + error);
-    } else {
-        DebugLog.log(this, "UI", "Termux test dispatched, awaiting result");
-    }
-}
 
 
     @Override

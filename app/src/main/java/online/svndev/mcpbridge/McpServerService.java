@@ -226,91 +226,101 @@ public int onStartCommand(Intent intent, int flags, int startId) {
     private static final String BINARY_EXTRACT_FAILED = "EXTRACT_FAILED";
 
     /**
-     * Copies the bundled 'cloudflared' asset into the native library directory or 
-     * code cache with a .so extension to bypass Android's noexec restrictions, 
-     * makes it executable and validates it.
+     * Copies the bundled 'cloudflared' asset into the app's private files dir
+     * (the one location Android reliably mounts executable for the owning app),
+     * applies the exec bit, then PROVES it runs by executing '--version'.
+     * code_cache and nativeLibraryDir are avoided: modern Android mounts them
+     * noexec, so setExecutable/canExecute report OK while the real exec fails
+     * with EACCES - exactly the error in the logs.
      */
     private String prepareCloudflaredBinary() {
-    // Strategy: try multiple locations that Android might allow execution from
-    File[] candidates = new File[] {
-        new File(getApplicationInfo().nativeLibraryDir, "libcloudflared.so"),
-        new File(getCodeCacheDir(), "libcloudflared.so"),
-        new File(getFilesDir().getParentFile(), "libcloudflared.so"),
-        new File(getFilesDir(), "cloudflared")
-    };
-    
-    // Find first writable candidate directory
-    binaryFile = null;
-    for (File cand : candidates) {
-        File parent = cand.getParentFile();
-        if (parent != null && parent.exists() && parent.canWrite()) {
-            binaryFile = cand;
-            break;
-        }
-    }
-    if (binaryFile == null) {
-        binaryFile = candidates[0]; // fallback
-    }
-
-    // If previous copy exists and valid, reuse
-    if (binaryFile.exists() && binaryFile.length() > 0) {
-        String status = validateBinaryFile(binaryFile);
-        if (BINARY_OK.equals(status)) {
-            DebugLog.log(this, "Svc", "Reusing existing binary at: " + binaryFile.getAbsolutePath());
-            return BINARY_OK;
-        }
-        binaryFile.delete();
-    }
-
-    // Extract from assets
-    try (InputStream in = getAssets().open("cloudflared");
-         FileOutputStream out = new FileOutputStream(binaryFile)) {
-        byte[] buffer = new byte[64 * 1024];
-        int read;
-        long total = 0;
-        while ((read = in.read(buffer)) != -1) {
-            out.write(buffer, 0, read);
-            total += read;
-        }
-        out.flush();
-        DebugLog.log(this, "Svc", "Extracted cloudflared: " + total + " bytes to " + binaryFile.getAbsolutePath());
-    } catch (IOException e) {
-        DebugLog.log(this, "Svc", "Extract FAILED: " + e.getMessage());
-        notifyBinaryProblem(BINARY_EXTRACT_FAILED, e.getMessage());
-        return BINARY_EXTRACT_FAILED;
-    }
-
-    // Make executable — try multiple methods
-    boolean execOk = false;
-    if (binaryFile.setExecutable(true, false)) {
-        execOk = true;
-    } else {
-        // Fallback: use Runtime.exec chmod
+        // Remove any stale copy left in code_cache by older builds.
         try {
-            Process chmod = Runtime.getRuntime().exec(new String[]{"chmod", "755", binaryFile.getAbsolutePath()});
-            chmod.waitFor();
-            execOk = binaryFile.canExecute();
-        } catch (Exception e) {
-            DebugLog.log(this, "Svc", "chmod fallback failed: " + e.getMessage());
+            new File(getCodeCacheDir(), "libcloudflared.so").delete();
+            new File(getApplicationInfo().nativeLibraryDir, "libcloudflared.so").delete();
+        } catch (Exception ignored) {
         }
-    }
-    
-    if (!execOk) {
-        DebugLog.log(this, "Svc", "setExecutable FAILED for " + binaryFile.getAbsolutePath());
-        notifyBinaryProblem(BINARY_NOT_EXEC, null);
-        return BINARY_NOT_EXEC;
+        binaryFile = new File(getFilesDir(), "cloudflared");
+
+        // If a previous copy exists and is valid, reuse it.
+        if (binaryFile.exists() && binaryFile.length() > 0) {
+            String status = validateBinaryFile(binaryFile);
+            if (BINARY_OK.equals(status)) {
+                DebugLog.log(this, "Svc", "Reusing existing binary at: " + binaryFile.getAbsolutePath());
+                return BINARY_OK;
+            }
+            binaryFile.delete();
+        }
+
+        // Extract from assets.
+        try (InputStream in = getAssets().open("cloudflared");
+             FileOutputStream out = new FileOutputStream(binaryFile)) {
+            byte[] buffer = new byte[64 * 1024];
+            int read;
+            long total = 0;
+            while ((read = in.read(buffer)) != -1) {
+                out.write(buffer, 0, read);
+                total += read;
+            }
+            out.flush();
+            DebugLog.log(this, "Svc", "Extracted cloudflared: " + total + " bytes to " + binaryFile.getAbsolutePath());
+        } catch (IOException e) {
+            DebugLog.log(this, "Svc", "Extract FAILED: " + e.getMessage());
+            notifyBinaryProblem(BINARY_EXTRACT_FAILED, e.getMessage());
+            return BINARY_EXTRACT_FAILED;
+        }
+
+        // Make executable - Java API plus a real chmod fallback.
+        boolean execOk = binaryFile.setExecutable(true, false);
+        if (!execOk) {
+            try {
+                Process chmod = Runtime.getRuntime().exec(new String[]{"chmod", "755", binaryFile.getAbsolutePath()});
+                chmod.waitFor();
+                execOk = binaryFile.canExecute();
+            } catch (Exception e) {
+                DebugLog.log(this, "Svc", "chmod fallback failed: " + e.getMessage());
+            }
+        }
+        if (!execOk) {
+            DebugLog.log(this, "Svc", "setExecutable FAILED for " + binaryFile.getAbsolutePath());
+            notifyBinaryProblem(BINARY_NOT_EXEC, null);
+            return BINARY_NOT_EXEC;
+        }
+
+        // Prove it actually runs (catches noexec mounts that canExecute() misses).
+        String status = verifyBinaryExecutes();
+        if (!BINARY_OK.equals(status)) {
+            notifyBinaryProblem(status, null);
+        }
+        return status;
     }
 
-    String status = validateBinaryFile(binaryFile);
-    if (!BINARY_OK.equals(status)) {
-        notifyBinaryProblem(status, null);
+    /** Spawns 'cloudflared --version' and checks it exits 0. Catches noexec mounts. */
+    private String verifyBinaryExecutes() {
+        try {
+            Process p = new ProcessBuilder(binaryFile.getAbsolutePath(), "--version")
+                    .redirectErrorStream(true).start();
+            BufferedReader br = new BufferedReader(new InputStreamReader(p.getInputStream(), StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            String l;
+            while ((l = br.readLine()) != null) sb.append(l).append('\n');
+            int code = p.waitFor();
+            String out = sb.toString().trim();
+            DebugLog.log(this, "Svc", "cloudflared --version exit=" + code + " : " + out);
+            if (code != 0) {
+                return BINARY_NOT_EXEC;
+            }
+            return BINARY_OK;
+        } catch (Exception e) {
+            DebugLog.log(this, "Svc", "cloudflared exec check FAILED: " + e.getMessage());
+            return BINARY_NOT_EXEC;
+        }
     }
-    return status;
-}
 
     /**
-     * Checks the file is present, roughly the expected size (~30-35MB) and
-     * executable. Returns BINARY_OK or a failure constant.
+     * Checks the file is present and roughly the expected size (~30-35MB).
+     * NOTE: cannot rely on canExecute() here - the permission bit is set even
+     * on noexec mounts; the real exec check happens in verifyBinaryExecutes().
      */
     private String validateBinaryFile(File file) {
         if (file == null || !file.exists()) {
@@ -322,9 +332,6 @@ public int onStartCommand(Intent intent, int flags, int startId) {
         }
         if (size < EXPECTED_MIN_BYTES || size > EXPECTED_MAX_BYTES) {
             return BINARY_TOO_SMALL; // out of the expected band
-        }
-        if (!file.canExecute()) {
-            return BINARY_NOT_EXEC;
         }
         return BINARY_OK;
     }
@@ -1083,6 +1090,10 @@ if (enableTermux) {
             ProcessBuilder pb = new ProcessBuilder(binaryFile.getAbsolutePath(),
                     "tunnel", "run", "--token", token);
             pb.redirectErrorStream(true);
+            // cloudflared needs a writable HOME (it caches its credentials/config)
+            // and TMPDIR; the app process has neither set on Android.
+            pb.environment().put("HOME", getFilesDir().getAbsolutePath());
+            pb.environment().put("TMPDIR", getCacheDir().getAbsolutePath());
             cloudflaredProcess = pb.start();
             DebugLog.log(this, "Svc", "cloudflared token tunnel process started");
             broadcastTunnelInfo(MODE_TOKEN, null, true);
@@ -1110,6 +1121,10 @@ if (enableTermux) {
             ProcessBuilder pb = new ProcessBuilder(binaryFile.getAbsolutePath(),
                     "tunnel", "--url", "http://127.0.0.1:" + PORT, "--no-autoupdate");
             pb.redirectErrorStream(true);
+            // cloudflared needs a writable HOME (it caches its credentials/config)
+            // and TMPDIR; the app process has neither set on Android.
+            pb.environment().put("HOME", getFilesDir().getAbsolutePath());
+            pb.environment().put("TMPDIR", getCacheDir().getAbsolutePath());
             cloudflaredProcess = pb.start();
             DebugLog.log(this, "Svc", "cloudflared quick tunnel process started (awaiting URL)");
             broadcastTunnelInfo(MODE_QUICK, null, true);
