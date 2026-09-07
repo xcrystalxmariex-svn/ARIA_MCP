@@ -806,12 +806,16 @@ if (enableTermux) {
     /** Builds the tools/list entry for a user custom tool, attaching its JSON
      *  inputSchema (user-provided, or a sensible type-derived fallback). */
     private JSONObject buildCustomToolEntry(CustomTool t) {
-        JSONObject entry = new JSONObject()
-                .put("name", t.name)
-                .put("description", t.description);
-        JSONObject schema = parseToolSchema(t.schema, t.type);
-        if (schema != null) {
-            entry.put("inputSchema", schema);
+        JSONObject entry = new JSONObject();
+        try {
+            entry.put("name", t.name);
+            entry.put("description", t.description == null ? "" : t.description);
+            JSONObject schema = parseToolSchema(t.schema, t.type);
+            if (schema != null) {
+                entry.put("inputSchema", schema);
+            }
+        } catch (Exception e) {
+            DebugLog.log(this, "Svc", "buildCustomToolEntry failed: " + e.getMessage());
         }
         return entry;
     }
@@ -828,18 +832,29 @@ if (enableTermux) {
             }
         }
         JSONObject props = new JSONObject();
-        if ("shell".equals(type)) {
-            props.put("args", new JSONObject()
-                    .put("type", "string")
-                    .put("description", "Arguments to append to the shell command (space-separated)."));
-        } else {
-            props.put("input", new JSONObject()
-                    .put("type", "object")
-                    .put("description", "Arbitrary JSON input passed to the JS snippet as the global 'input' variable."));
+        try {
+            if ("shell".equals(type)) {
+                JSONObject p = new JSONObject();
+                p.put("type", "string");
+                p.put("description", "Arguments to append to the shell command (space-separated).");
+                props.put("args", p);
+            } else {
+                JSONObject p = new JSONObject();
+                p.put("type", "object");
+                p.put("description", "Arbitrary JSON input passed to the JS snippet as the global 'input' variable.");
+                props.put("input", p);
+            }
+            JSONObject out = new JSONObject();
+            out.put("type", "object");
+            out.put("properties", props);
+            return out;
+        } catch (Exception e) {
+            try {
+                return new JSONObject().put("type", "object");
+            } catch (Exception ignored) {
+                return new JSONObject();
+            }
         }
-        return new JSONObject()
-                .put("type", "object")
-                .put("properties", props);
     }
 
     private CustomTool findCustomTool(String name) {
