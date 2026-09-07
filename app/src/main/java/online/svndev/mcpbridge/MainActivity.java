@@ -244,7 +244,7 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.btnHelpServer).setOnClickListener(v -> showHelpDialog(
                 "Server Switch",
                 "Turns the local MCP server and the tunnel on or off.\n\n" +
-                "ON: extracts cloudflared from the app assets, validates it, starts the " +
+                "ON: uses the installed cloudflared native binary, validates it, starts the " +
                 "embedded HTTP server on port 8000 (/mcp), then starts the tunnel in the " +
                 "mode chosen under Connection Setup - your Cloudflare token/custom domain " +
                 "or a random trycloudflare URL. The Endpoint line shows the public URL; " +
@@ -1114,29 +1114,19 @@ public class MainActivity extends AppCompatActivity {
     // ------------------------------------------------------------------
 
     private void refreshBinaryDiagnostic() {
-        // Check native library dir first (service's primary path)
-        File libDir = new File(getApplicationInfo().nativeLibraryDir);
-        File binaryFile = new File(libDir, "libcloudflared.so");
-        if (!binaryFile.getParentFile().canWrite()) {
-            binaryFile = new File(getCodeCacheDir(), "libcloudflared.so");
-        }
-        
-        try {
-            long assetBytes = getAssets().openFd("cloudflared").getLength();
-            appendDiagnostic("Bundled asset: " + formatSize(assetBytes)
-                    + (assetBytes == 0 ? " [ZERO BYTES - MISSING!]" : " [OK]"));
-            DebugLog.log(this, "UI", "Bundled asset size=" + assetBytes);
-        } catch (Exception e) {
-            appendDiagnostic("Bundled asset: MISSING from assets/cloudflared");
-            DebugLog.log(this, "UI", "Bundled asset MISSING: " + e.getMessage());
-        }
-        
+        // cloudflared is packaged as a native library so Android installs it
+        // into nativeLibraryDir with the SELinux label required for exec().
+        File binaryFile = new File(getApplicationInfo().nativeLibraryDir, "libcloudflared.so");
         if (binaryFile.exists() && binaryFile.length() > 0) {
-            appendDiagnostic("Extracted copy: " + formatSize(binaryFile.length())
+            appendDiagnostic("Bundled native binary: " + formatSize(binaryFile.length())
                     + (binaryFile.canExecute() ? " [executable]" : " [NOT executable]"));
+            DebugLog.log(this, "UI", "Bundled native binary: " + binaryFile.getAbsolutePath()
+                    + " size=" + binaryFile.length());
         } else {
-            appendDiagnostic("Extracted copy: not yet created (start server to extract)");
+            appendDiagnostic("Bundled native binary: MISSING from nativeLibraryDir");
+            DebugLog.log(this, "UI", "Bundled native binary MISSING: " + binaryFile.getAbsolutePath());
         }
+        appendDiagnostic("Runtime copy: none - Android executes the installed native binary directly");
     }
 
     private void updateDiagnostic(String status) {

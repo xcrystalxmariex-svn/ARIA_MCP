@@ -20,7 +20,8 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="Universal MCP Bridge"
-        android:theme="@style/Theme.MCPBridge">
+        android:theme="@style/Theme.MCPBridge"
+        android:extractNativeLibs="true">
 
         <activity android:name=".MainActivity"
             android:exported="true">
@@ -35,6 +36,12 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- Stable explicit target for Termux RUN_COMMAND result PendingIntents. -->
+        <receiver
+            android:name=".TermuxResultReceiver"
+            android:enabled="true"
+            android:exported="true" />
     </application>
 </manifest>
  

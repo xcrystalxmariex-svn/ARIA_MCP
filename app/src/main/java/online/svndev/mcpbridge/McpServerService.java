@@ -226,68 +226,41 @@ public int onStartCommand(Intent intent, int flags, int startId) {
     private static final String BINARY_EXTRACT_FAILED = "EXTRACT_FAILED";
 
     /**
-     * Copies the bundled 'cloudflared' asset into the app's private files dir
-     * (the one location Android reliably mounts executable for the owning app),
-     * applies the exec bit, then PROVES it runs by executing '--version'.
-     * code_cache and nativeLibraryDir are avoided: modern Android mounts them
-     * noexec, so setExecutable/canExecute report OK while the real exec fails
-     * with EACCES - exactly the error in the logs.
+     * Locates the bundled cloudflared binary in the app's native library
+     * directory and PROVES it executes.
+     *
+     * WHY nativeLibraryDir and not an app-data path: on Android 10+ the
+     * SELinux W^X policy forbids exec() of any file an app extracts into its
+     * own data directory (files/, code_cache/) - they are labelled
+     * app_data_file, which denies execve() regardless of the permission bits.
+     * That is exactly the "error=13, Permission denied" seen in the logs even
+     * after chmod 755. The one location an app may execute a bundled binary is
+     * the native library directory: the PackageManager extracts jniLibs/*.so
+     * there at install time with the correct exec SELinux label. The binary is
+     * shipped as app/src/main/jniLibs/arm64-v8a/libcloudflared.so (a real ELF
+     * executable that merely happens to end in .so).
      */
     private String prepareCloudflaredBinary() {
-        // Remove any stale copy left in code_cache by older builds.
+        // Remove any stale copy left in app-data paths by older builds.
         try {
             new File(getCodeCacheDir(), "libcloudflared.so").delete();
-            new File(getApplicationInfo().nativeLibraryDir, "libcloudflared.so").delete();
+            new File(getFilesDir(), "cloudflared").delete();
+            new File(getFilesDir(), "libcloudflared.so").delete();
         } catch (Exception ignored) {
         }
-        binaryFile = new File(getFilesDir(), "cloudflared");
 
-        // If a previous copy exists and is valid, reuse it.
-        if (binaryFile.exists() && binaryFile.length() > 0) {
-            String status = validateBinaryFile(binaryFile);
-            if (BINARY_OK.equals(status)) {
-                DebugLog.log(this, "Svc", "Reusing existing binary at: " + binaryFile.getAbsolutePath());
-                return BINARY_OK;
-            }
-            binaryFile.delete();
+        binaryFile = new File(getApplicationInfo().nativeLibraryDir, "libcloudflared.so");
+        if (!binaryFile.exists() || binaryFile.length() == 0) {
+            DebugLog.log(this, "Svc", "Bundled native lib not found at " + binaryFile.getAbsolutePath());
+            notifyBinaryProblem(BINARY_MISSING, binaryFile.getAbsolutePath());
+            return BINARY_MISSING;
         }
+        DebugLog.log(this, "Svc", "Using bundled cloudflared at: " + binaryFile.getAbsolutePath()
+                + " (" + binaryFile.length() + " bytes)");
 
-        // Extract from assets.
-        try (InputStream in = getAssets().open("cloudflared");
-             FileOutputStream out = new FileOutputStream(binaryFile)) {
-            byte[] buffer = new byte[64 * 1024];
-            int read;
-            long total = 0;
-            while ((read = in.read(buffer)) != -1) {
-                out.write(buffer, 0, read);
-                total += read;
-            }
-            out.flush();
-            DebugLog.log(this, "Svc", "Extracted cloudflared: " + total + " bytes to " + binaryFile.getAbsolutePath());
-        } catch (IOException e) {
-            DebugLog.log(this, "Svc", "Extract FAILED: " + e.getMessage());
-            notifyBinaryProblem(BINARY_EXTRACT_FAILED, e.getMessage());
-            return BINARY_EXTRACT_FAILED;
-        }
-
-        // Make executable - Java API plus a real chmod fallback.
-        boolean execOk = binaryFile.setExecutable(true, false);
-        if (!execOk) {
-            try {
-                Process chmod = Runtime.getRuntime().exec(new String[]{"chmod", "755", binaryFile.getAbsolutePath()});
-                chmod.waitFor();
-                execOk = binaryFile.canExecute();
-            } catch (Exception e) {
-                DebugLog.log(this, "Svc", "chmod fallback failed: " + e.getMessage());
-            }
-        }
-        if (!execOk) {
-            DebugLog.log(this, "Svc", "setExecutable FAILED for " + binaryFile.getAbsolutePath());
-            notifyBinaryProblem(BINARY_NOT_EXEC, null);
-            return BINARY_NOT_EXEC;
-        }
-
-        // Prove it actually runs (catches noexec mounts that canExecute() misses).
+        // Prove it actually runs. nativeLibraryDir files are already executable
+        // with the right SELinux label, so no chmod is needed - but we still
+        // verify by executing '--version' rather than trusting existence.
         String status = verifyBinaryExecutes();
         if (!BINARY_OK.equals(status)) {
             notifyBinaryProblem(status, null);
@@ -295,7 +268,7 @@ public int onStartCommand(Intent intent, int flags, int startId) {
         return status;
     }
 
-    /** Spawns 'cloudflared --version' and checks it exits 0. Catches noexec mounts. */
+    /** Spawns 'cloudflared --version' and checks it exits 0. Catches SELinux/exec denials. */
     private String verifyBinaryExecutes() {
         try {
             Process p = new ProcessBuilder(binaryFile.getAbsolutePath(), "--version")

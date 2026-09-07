@@ -86,13 +86,14 @@ public final class TermuxBridge {
      * Build the PendingIntent Termux should deliver the command result to.
      * requestCode must differ per in-flight command or the results collide.
      *
-     * The intent stays IMPLICIT (package + action, NO component): the result
-     * is a broadcast that must reach the dynamically-registered receiver in
-     * MainActivity/service. Pointing it at an Activity component would drop it.
+     * The PendingIntent targets a manifest-declared BroadcastReceiver rather
+     * than an Activity or a dynamic-only receiver. That gives Termux a stable
+     * explicit component; the receiver forwards the result internally to the
+     * Activity/service listeners.
      */
     public static PendingIntent buildResultPendingIntent(Context context, int requestCode) {
         Intent result = new Intent(ACTION_APP_RESULT);
-        result.setPackage(context.getPackageName());
+        result.setClass(context, TermuxResultReceiver.class);
         int flags = PendingIntent.FLAG_UPDATE_CURRENT;
         if (android.os.Build.VERSION.SDK_INT >= 23) {
             // Mutable is REQUIRED so Termux can attach the plugin-result bundle;
