@@ -500,32 +500,51 @@ while (!s.isClosed() && !s.isInputShutdown() && !Thread.currentThread().isInterr
                 JSONArray tools = new JSONArray();
 
                 // Built-in tools. Every tool is listed and gated by its own toggle
-                // (toolEnabled combines the category master switch with the per-tool toggle).
+                // (toolEnabled combines the category master switch with the per-tool toggle),
+                // and each carries a JSON inputSchema so the LLM knows how to call it.
                 if (enableOracle) {
     tools.put(new JSONObject()
             .put("name", "execute_oracle_js")
-            .put("description", "Executes embedded database JS routines pipeline."));
+            .put("description", "Executes embedded database JS routines pipeline.")
+            .put("inputSchema", new JSONObject()
+                .put("type", "object")
+                .put("properties", new JSONObject().put("code", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "JavaScript source to evaluate with the embedded Rhino engine")))
+                .put("required", new JSONArray().put("code"))));
 }
 if (enableShell) {
     tools.put(new JSONObject()
             .put("name", "run_local_process")
-            .put("description", "Runs a local shell command on the device via Runtime.exec and returns its output."));
+            .put("description", "Runs a local shell command on the device via Runtime.exec and returns its output.")
+            .put("inputSchema", new JSONObject()
+                .put("type", "object")
+                .put("properties", new JSONObject().put("command", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "Shell command line to execute on the device.")))
+                .put("required", new JSONArray().put("command"))));
 }
 if (enableTermux) {
     tools.put(new JSONObject()
             .put("name", "run_termux_command")
-            .put("description", "Forwards terminal runtime triggers to local system packages via Termux RUN_COMMAND."));
+            .put("description", "Forwards terminal runtime triggers to local system packages via Termux RUN_COMMAND.")
+            .put("inputSchema", new JSONObject()
+                .put("type", "object")
+                .put("properties", new JSONObject().put("command", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "Command to run inside Termux.")))
+                .put("required", new JSONArray().put("command"))));
 }
  
 
                 // User-added custom tools (JS snippet or shell command).
                 for (CustomTool t : customTools) {
-                    tools.put(new JSONObject()
-                            .put("name", t.name)
-                            .put("description", t.description));
+                    tools.put(buildCustomToolEntry(t));
                 }
 
                 // Aggregated external MCP servers (this app acts as an MCP client).
+                // Their own inputSchema is passed through so the LLM sees the real
+                // parameter contract each remote tool expects.
                 if (enableExternal) {
                     for (ExternalServer s : externalServers) {
                         if (!s.enabled) continue;
@@ -533,9 +552,16 @@ if (enableTermux) {
                         cacheExternalToolNames(s.name, remoteTools);
                         for (int i = 0; i < remoteTools.length(); i++) {
                             JSONObject rt = remoteTools.getJSONObject(i);
-                            tools.put(new JSONObject()
+                            JSONObject entry = new JSONObject()
                                 .put("name", "ext_" + s.name + "_" + rt.optString("name"))
-                                .put("description", rt.optString("description", "External MCP tool via " + s.url)));
+                                .put("description", rt.optString("description", "External MCP tool via " + s.url));
+                            Object schema = rt.opt("inputSchema");
+                            if (schema instanceof JSONObject) {
+                                entry.put("inputSchema", (JSONObject) schema);
+                            } else {
+                                entry.put("inputSchema", new JSONObject().put("type", "object"));
+                            }
+                            tools.put(entry);
                         }
                     }
                 }
@@ -543,13 +569,35 @@ if (enableTermux) {
                 // Management tools (always listed; each has its own toggle too).
                 tools.put(new JSONObject()
                         .put("name", "custom_tool_add")
-                        .put("description", "Registers a custom tool (JS snippet or shell command) on this multiplexer."));
+                        .put("description", "Registers a custom tool (JS snippet or shell command) on this multiplexer.")
+                        .put("inputSchema", new JSONObject()
+                            .put("type", "object")
+                            .put("properties", new JSONObject()
+                                .put("name", new JSONObject().put("type", "string"))
+                                .put("description", new JSONObject().put("type", "string"))
+                                .put("type", new JSONObject().put("type", "string").put("enum", new JSONArray().put("js").put("shell")))
+                                .put("code", new JSONObject().put("type", "string"))
+                                .put("schema", new JSONObject().put("type", "string").put("description", "Optional JSON Schema string describing how to call this custom tool")))
+                            .put("required", new JSONArray().put("name").put("code"))));
                 tools.put(new JSONObject()
                         .put("name", "external_mcp_add")
-                        .put("description", "Adds a remote MCP server (URL + optional launch command, headers, auth) to aggregate."));
+                        .put("description", "Adds a remote MCP server (URL + optional launch command, headers, auth) to aggregate.")
+                        .put("inputSchema", new JSONObject()
+                            .put("type", "object")
+                            .put("properties", new JSONObject()
+                                .put("name", new JSONObject().put("type", "string"))
+                                .put("url", new JSONObject().put("type", "string"))
+                                .put("launch", new JSONObject().put("type", "string"))
+                                .put("headers", new JSONObject().put("type", "string"))
+                                .put("auth", new JSONObject().put("type", "string")))
+                            .put("required", new JSONArray().put("url"))));
                 tools.put(new JSONObject()
                         .put("name", "external_mcp_remove")
-                        .put("description", "Removes a previously added remote MCP server."));
+                        .put("description", "Removes a previously added remote MCP server.")
+                        .put("inputSchema", new JSONObject()
+                            .put("type", "object")
+                            .put("properties", new JSONObject().put("url", new JSONObject().put("type", "string")))
+                            .put("required", new JSONArray().put("url"))));
 
                 // Advertise only the tools whose own toggle is enabled.
                 JSONArray visible = new JSONArray();
@@ -589,7 +637,8 @@ if (enableTermux) {
                     String cdesc = toolArgs.optString("description", "Custom tool");
                     String ctype = toolArgs.optString("type", "js"); // js | shell
                     String ccode = toolArgs.optString("code");
-                    customTools.add(new CustomTool(cname, cdesc, ctype, ccode, true));
+                    String cschema = toolArgs.optString("schema", "");
+                    customTools.add(new CustomTool(cname, cdesc, ctype, ccode, true, cschema));
                     saveCustomTools();
                     result.put("content", new JSONArray()
                             .put(new JSONObject().put("type", "text").put("text", "Custom tool '" + cname + "' registered.")));
@@ -624,7 +673,7 @@ if (enableTermux) {
                     // Custom tool or external-aggregated tool.
                     CustomTool ct = findCustomTool(name);
                     if (ct != null) {
-                        String out = executeCustomTool(ct);
+                        String out = executeCustomTool(ct, toolArgs);
                         result.put("content", new JSONArray()
                                 .put(new JSONObject().put("type", "text").put("text", out)));
                     } else if (name.startsWith("ext_")) {
@@ -702,11 +751,95 @@ if (enableTermux) {
     //  Custom tools (JS snippet or shell command, added via the UI / MCP)
     // ---------------------------------------------------------------------
 
-    private String executeCustomTool(CustomTool t) {
+    private String executeCustomTool(CustomTool t, JSONObject args) {
+        if (args == null) args = new JSONObject();
         if ("shell".equals(t.type)) {
-            return runLocalProcess(t.code);
+            // Append any string args to the command so a schema-defined tool can
+            // receive parameters. Supports both a plain "args" string and a
+            // space-joined rendering of all non-empty argument values.
+            return runLocalProcess(t.code + " " + renderShellArgs(args));
         }
-        return executeEmbeddedJs(t.code);
+        // JS: expose the full JSON arguments object as the global 'input' so the
+        // snippet can read them, matching the advertised inputSchema.
+        String jsonInput = args.toString();
+        return executeEmbeddedJsWithInput(t.code, jsonInput);
+    }
+
+    /** Space-joins string argument values for a shell custom tool. */
+    private String renderShellArgs(JSONObject args) {
+        StringBuilder sb = new StringBuilder();
+        if (args.has("args") && !args.isNull("args")) {
+            return args.optString("args", "").trim();
+        }
+        java.util.Iterator<String> keys = args.keys();
+        while (keys.hasNext()) {
+            String k = keys.next();
+            Object v = args.opt(k);
+            if (v instanceof String && !v.toString().isEmpty()) {
+                sb.append(v.toString()).append(' ');
+            }
+        }
+        return sb.toString().trim();
+    }
+
+    /** Evaluates a JS snippet with the JSON arguments injected as a global 'input' object. */
+    private String executeEmbeddedJsWithInput(String script, String jsonInput) {
+        org.mozilla.javascript.Context rhino = org.mozilla.javascript.Context.enter();
+        rhino.setOptimizationLevel(-1);
+        try {
+            Scriptable scope = rhino.initStandardObjects();
+            try {
+                scope.put("input", scope, org.mozilla.javascript.Context.javaToJS(
+                        new JSONObject(jsonInput), scope));
+            } catch (Exception ignored) {
+                scope.put("input", scope, new org.mozilla.javascript.NativeObject());
+            }
+            Object obj = rhino.evaluateString(scope, script, "McpScript", 1, null);
+            return org.mozilla.javascript.Context.toString(obj);
+        } catch (Exception e) {
+            return "Script Error: " + e.getMessage();
+        } finally {
+            org.mozilla.javascript.Context.exit();
+        }
+    }
+
+    /** Builds the tools/list entry for a user custom tool, attaching its JSON
+     *  inputSchema (user-provided, or a sensible type-derived fallback). */
+    private JSONObject buildCustomToolEntry(CustomTool t) {
+        JSONObject entry = new JSONObject()
+                .put("name", t.name)
+                .put("description", t.description);
+        JSONObject schema = parseToolSchema(t.schema, t.type);
+        if (schema != null) {
+            entry.put("inputSchema", schema);
+        }
+        return entry;
+    }
+
+    /** Parses a user-supplied JSON Schema string for a custom tool. When absent
+     *  (or invalid), returns a minimal object schema derived from the tool type
+     *  so the LLM always has a callable contract for every custom tool. */
+    private JSONObject parseToolSchema(String schemaStr, String type) {
+        if (schemaStr != null && !schemaStr.trim().isEmpty()) {
+            try {
+                return new JSONObject(schemaStr);
+            } catch (Exception ignored) {
+                DebugLog.log(this, "Svc", "Invalid custom-tool schema JSON; using default: " + schemaStr);
+            }
+        }
+        JSONObject props = new JSONObject();
+        if ("shell".equals(type)) {
+            props.put("args", new JSONObject()
+                    .put("type", "string")
+                    .put("description", "Arguments to append to the shell command (space-separated)."));
+        } else {
+            props.put("input", new JSONObject()
+                    .put("type", "object")
+                    .put("description", "Arbitrary JSON input passed to the JS snippet as the global 'input' variable."));
+        }
+        return new JSONObject()
+                .put("type", "object")
+                .put("properties", props);
     }
 
     private CustomTool findCustomTool(String name) {
@@ -726,7 +859,7 @@ if (enableTermux) {
                 customTools.add(new CustomTool(
                         o.optString("name"), o.optString("description"),
                         o.optString("type", "js"), o.optString("code"),
-                        o.optBoolean("enabled", true)));
+                        o.optBoolean("enabled", true), o.optString("schema", "")));
             }
         } catch (Exception ignored) {
         }
@@ -739,7 +872,8 @@ if (enableTermux) {
                 arr.put(new JSONObject()
                         .put("name", t.name).put("description", t.description)
                         .put("type", t.type).put("code", t.code)
-                        .put("enabled", t.enabled));
+                        .put("enabled", t.enabled)
+                        .put("schema", t.schema == null ? "" : t.schema));
             }
             getSharedPreferences("mcp_prefs", MODE_PRIVATE).edit()
                     .putString("custom_tools", arr.toString()).apply();
@@ -998,13 +1132,15 @@ if (enableTermux) {
         final String type; // "js" | "shell"
         final String code;
         final boolean enabled;
+        final String schema; // JSON Schema (JSON string) telling the LLM how to call it; may be empty
 
-        CustomTool(String name, String description, String type, String code, boolean enabled) {
+        CustomTool(String name, String description, String type, String code, boolean enabled, String schema) {
             this.name = name;
             this.description = description;
             this.type = type;
             this.code = code;
             this.enabled = enabled;
+            this.schema = schema;
         }
     }
 

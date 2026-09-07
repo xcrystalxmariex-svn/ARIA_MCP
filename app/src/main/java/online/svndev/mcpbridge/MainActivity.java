@@ -580,6 +580,14 @@ public class MainActivity extends AppCompatActivity {
         descInput.setHint("Description shown to the LLM");
         layout.addView(descInput);
 
+        final EditText schemaInput = new EditText(this);
+        schemaInput.setHint("JSON schema (optional) - tells the LLM how to call this tool, e.g. "
+                + "{\"type\":\"object\",\"properties\":{\"msg\":{\"type\":\"string\"}}}");
+        schemaInput.setMinLines(3);
+        schemaInput.setGravity(android.view.Gravity.TOP | android.view.Gravity.START);
+        schemaInput.setTypeface(android.graphics.Typeface.MONOSPACE);
+        layout.addView(schemaInput);
+
         final RadioGroup typeGroup = new RadioGroup(this);
         final android.widget.RadioButton jsRadio = new android.widget.RadioButton(this);
         jsRadio.setText("JavaScript snippet (Rhino engine)");
@@ -619,13 +627,23 @@ public class MainActivity extends AppCompatActivity {
                         String name = nameInput.getText().toString().trim();
                         String desc = descInput.getText().toString().trim();
                         String code = codeInput.getText().toString().trim();
+                        String schema = schemaInput.getText().toString().trim();
                         if (name.isEmpty() || code.isEmpty()) {
                             Toast.makeText(MainActivity.this,
                                     "Name and code are required", Toast.LENGTH_SHORT).show();
                             return;
                         }
+                        if (!schema.isEmpty()) {
+                            try {
+                                new org.json.JSONObject(schema);
+                            } catch (Exception e) {
+                                Toast.makeText(MainActivity.this,
+                                        "Schema must be valid JSON (check brackets/quotes)", Toast.LENGTH_LONG).show();
+                                return;
+                            }
+                        }
                         String type = shellRadio.isChecked() ? "shell" : "js";
-                        saveCustomToolToPrefs(name, desc, type, code);
+                        saveCustomToolToPrefs(name, desc, type, code, schema);
                         Toast.makeText(MainActivity.this,
                                 "Custom tool '" + name + "' saved", Toast.LENGTH_SHORT).show();
                         notifyServiceReload();
@@ -635,7 +653,7 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    private void saveCustomToolToPrefs(String name, String desc, String type, String code) {
+    private void saveCustomToolToPrefs(String name, String desc, String type, String code, String schema) {
         SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
         String existing = prefs.getString("custom_tools", "[]");
         try {
@@ -645,7 +663,8 @@ public class MainActivity extends AppCompatActivity {
                     .put("description", desc)
                     .put("type", type)
                     .put("code", code)
-                    .put("enabled", true));
+                    .put("enabled", true)
+                    .put("schema", schema == null ? "" : schema));
             prefs.edit().putString("custom_tools", arr.toString()).apply();
         } catch (Exception e) {
             DebugLog.log(this, "UI", "saveCustomTool failed: " + e.getMessage());
